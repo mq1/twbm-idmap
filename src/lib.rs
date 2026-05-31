@@ -5,7 +5,7 @@
 
 include!(concat!(env!("OUT_DIR"), "/id_map_meta.rs"));
 
-use std::num::NonZeroU32;
+use std::{borrow::Cow, num::NonZeroU32};
 
 #[repr(align(4))]
 struct Data([u8; DATA_LEN]);
@@ -63,9 +63,21 @@ impl From<&str> for GameID {
     }
 }
 
+impl From<String> for GameID {
+    fn from(value: String) -> Self {
+        Self::from(value.as_str())
+    }
+}
+
 impl From<&String> for GameID {
     fn from(value: &String) -> Self {
-        GameID::from(value.as_str())
+        Self::from(value.as_str())
+    }
+}
+
+impl<'a> From<Cow<'a, str>> for GameID {
+    fn from(value: Cow<'a, str>) -> Self {
+        Self::from(value.as_ref())
     }
 }
 
