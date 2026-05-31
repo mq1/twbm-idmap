@@ -50,8 +50,9 @@ impl From<u32> for GameID {
 
 impl From<[u8; 6]> for GameID {
     fn from(value: [u8; 6]) -> Self {
-        let s = unsafe { std::str::from_utf8_unchecked(&value) };
-        GameID::from(s)
+        std::str::from_utf8(&value)
+            .map(GameID::from)
+            .unwrap_or_default()
     }
 }
 
