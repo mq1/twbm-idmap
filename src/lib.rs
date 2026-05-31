@@ -5,7 +5,7 @@
 
 include!(concat!(env!("OUT_DIR"), "/id_map_meta.rs"));
 
-use std::{borrow::Cow, num::NonZeroU32};
+use std::num::NonZeroU32;
 
 #[repr(align(4))]
 struct Data([u8; DATA_LEN]);
@@ -38,59 +38,15 @@ impl Data {
 
 static DATA: Data = Data(*include_bytes!(concat!(env!("OUT_DIR"), "/id_map.bin")));
 
-#[derive(Debug, Clone, Copy, Default)]
-#[repr(transparent)]
-pub struct GameID(u32);
-
-impl From<u32> for GameID {
-    fn from(value: u32) -> Self {
-        Self(value)
-    }
-}
-
-impl From<[u8; 6]> for GameID {
-    fn from(value: [u8; 6]) -> Self {
-        std::str::from_utf8(&value)
-            .map(GameID::from)
-            .unwrap_or_default()
-    }
-}
-
-impl From<&str> for GameID {
-    fn from(value: &str) -> Self {
-        u32::from_str_radix(value, 36)
-            .map(GameID)
-            .unwrap_or_default()
-    }
-}
-
-impl From<String> for GameID {
-    fn from(value: String) -> Self {
-        Self::from(value.as_str())
-    }
-}
-
-impl From<&String> for GameID {
-    fn from(value: &String) -> Self {
-        Self::from(value.as_str())
-    }
-}
-
-impl<'a> From<Cow<'a, str>> for GameID {
-    fn from(value: Cow<'a, str>) -> Self {
-        Self::from(value.as_ref())
-    }
-}
-
 #[derive(Debug, Clone, Copy)]
 #[repr(transparent)]
 pub struct GameEntry(usize);
 
 impl GameEntry {
     #[inline]
-    pub fn lookup(id: impl Into<GameID>) -> Option<Self> {
-        let base36 = id.into().0;
-        DATA.game_ids().binary_search(&base36).ok().map(GameEntry)
+    pub fn lookup(id: impl AsRef<str>) -> Option<Self> {
+        let base36 = u32::from_str_radix(id.as_ref(), 36).ok()?;
+        DATA.game_ids().binary_search(&base36).ok().map(Self)
     }
 
     #[inline]
