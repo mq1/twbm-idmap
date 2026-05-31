@@ -1,0 +1,12 @@
+[package]
+name = "twbm-idmap"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+authors = ["Manuel Quarneti <mq1@ik.me>"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/mq1/twbm-idmap"
+homepage = "https://github.com/mq1/twbm-idmap"
+description = "Get Wii/NGC game titles and gamehacking ids. offline and no dependencies"
+
+include = ["src/**/*", "assets/**/*", "build.rs", "Cargo.toml"]
