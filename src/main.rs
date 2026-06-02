@@ -5,7 +5,7 @@
 
 use twbm_idmap::GameEntry;
 
-const USAGE: &str = "Usage: idmap <GAMEID>";
+const USAGE: &str = "Usage: twbm-idmap <GAMEID>";
 
 fn main() {
     let Some(game_id) = std::env::args().nth(1) else {

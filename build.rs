@@ -118,6 +118,9 @@ fn main() {
         bytes.len()
     );
 
+    #[cfg(feature = "compress")]
+    let bytes = miniz_oxide::deflate::compress_to_vec(&bytes, 9);
+
     let out_path = Path::new(&env::var("OUT_DIR").unwrap()).join("id_map.bin");
     fs::write(out_path, bytes).unwrap();
 

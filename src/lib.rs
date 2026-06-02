@@ -3,40 +3,17 @@
 
 #![warn(clippy::all, rust_2018_idioms)]
 
-include!(concat!(env!("OUT_DIR"), "/id_map_meta.rs"));
+#[cfg(not(feature = "compress"))]
+mod uncompressed;
 
-use std::num::NonZeroU32;
+#[cfg(not(feature = "compress"))]
+use uncompressed::DATA;
 
-#[repr(align(4))]
-struct Data([u8; DATA_LEN]);
+#[cfg(feature = "compress")]
+mod compressed;
 
-impl Data {
-    #[inline]
-    fn game_ids(&self) -> &[u32] {
-        let ptr = self.0.as_ptr().cast::<u32>();
-        unsafe { std::slice::from_raw_parts(ptr, COUNT) }
-    }
-
-    #[inline]
-    fn ghids(&self) -> &[u32] {
-        let ptr = self.0.as_ptr().cast::<u32>();
-        unsafe { std::slice::from_raw_parts(ptr.add(COUNT), COUNT) }
-    }
-
-    #[inline]
-    fn title_offsets(&self) -> &[u32] {
-        let ptr = self.0.as_ptr().cast::<u32>();
-        unsafe { std::slice::from_raw_parts(ptr.add(COUNT * 2), COUNT + 1) }
-    }
-
-    #[inline]
-    fn titles(&self) -> &str {
-        let slice = unsafe { self.0.get_unchecked(COUNT * 12 + 4..DATA_LEN) };
-        unsafe { std::str::from_utf8_unchecked(slice) }
-    }
-}
-
-static DATA: Data = Data(*include_bytes!(concat!(env!("OUT_DIR"), "/id_map.bin")));
+#[cfg(feature = "compress")]
+use compressed::DATA;
 
 #[derive(Debug, Clone, Copy)]
 #[repr(transparent)]
@@ -50,9 +27,9 @@ impl GameEntry {
     }
 
     #[inline]
-    pub fn ghid(&self) -> Option<NonZeroU32> {
+    pub fn ghid(&self) -> Option<u32> {
         let ghid = unsafe { *DATA.ghids().get_unchecked(self.0) };
-        NonZeroU32::new(ghid)
+        (ghid > 0).then_some(ghid)
     }
 
     #[inline]
