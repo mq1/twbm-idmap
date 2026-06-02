@@ -10,7 +10,7 @@ struct Data {
     pub game_ids: [u32; COUNT],
     pub ghids: [u32; COUNT],
     pub title_offsets: [u32; COUNT + 1],
-    pub titles: [u8; DATA_LEN - COUNT * 12 - 4],
+    pub titles: [u8; TITLES_LEN],
 }
 
 #[cfg(not(feature = "compress"))]
@@ -27,7 +27,7 @@ static DATA: std::sync::LazyLock<Box<Data>> = std::sync::LazyLock::new(|| {
 
     // inflate
     let ptr = buf.as_mut_ptr().cast();
-    let slice = unsafe { std::slice::from_raw_parts_mut(ptr, DATA_LEN) };
+    let slice = unsafe { std::slice::from_raw_parts_mut(ptr, std::mem::size_of::<Data>()) };
     let it = std::iter::once(compressed.as_slice());
     miniz_oxide::inflate::decompress_slice_iter_to_slice(slice, it, false, true).unwrap();
 
