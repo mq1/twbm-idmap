@@ -26,7 +26,7 @@ static DATA: std::sync::LazyLock<Box<Data>> = std::sync::LazyLock::new(|| {
     let mut buf = Box::<Data>::new_uninit();
 
     // inflate
-    let ptr = buf.as_mut_ptr().cast();
+    let ptr = buf.as_mut_ptr().cast::<u8>();
     let slice = unsafe { std::slice::from_raw_parts_mut(ptr, std::mem::size_of::<Data>()) };
     let it = std::iter::once(compressed.as_slice());
     miniz_oxide::inflate::decompress_slice_iter_to_slice(slice, it, false, true).unwrap();
