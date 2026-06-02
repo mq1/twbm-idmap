@@ -3,33 +3,37 @@
 
 include!(concat!(env!("OUT_DIR"), "/id_map_meta.rs"));
 
-#[repr(align(4))]
-pub struct Data([u8; DATA_LEN]);
+#[repr(C)]
+pub struct Data {
+    game_ids: [u32; COUNT],
+    ghids: [u32; COUNT],
+    title_offsets: [u32; COUNT + 1],
+    titles: [u8; DATA_LEN - COUNT * 12 - 4],
+}
 
 impl Data {
     #[inline]
     pub fn game_ids(&self) -> &[u32] {
-        let ptr = self.0.as_ptr().cast::<u32>();
-        unsafe { std::slice::from_raw_parts(ptr, COUNT) }
+        &self.game_ids
     }
 
     #[inline]
     pub fn ghids(&self) -> &[u32] {
-        let ptr = self.0.as_ptr().cast::<u32>();
-        unsafe { std::slice::from_raw_parts(ptr.add(COUNT), COUNT) }
+        &self.ghids
     }
 
     #[inline]
     pub fn title_offsets(&self) -> &[u32] {
-        let ptr = self.0.as_ptr().cast::<u32>();
-        unsafe { std::slice::from_raw_parts(ptr.add(COUNT * 2), COUNT + 1) }
+        &self.title_offsets
     }
 
     #[inline]
     pub fn titles(&self) -> &str {
-        let slice = unsafe { self.0.get_unchecked(COUNT * 12 + 4..DATA_LEN) };
-        unsafe { std::str::from_utf8_unchecked(slice) }
+        unsafe { std::str::from_utf8_unchecked(&self.titles) }
     }
 }
 
-pub static DATA: Data = Data(*include_bytes!(concat!(env!("OUT_DIR"), "/id_map.bin")));
+pub static DATA: Data = {
+    let bytes = *include_bytes!(concat!(env!("OUT_DIR"), "/id_map.bin"));
+    unsafe { std::mem::transmute(bytes) }
+};
