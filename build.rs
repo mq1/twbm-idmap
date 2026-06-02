@@ -119,8 +119,11 @@ fn main() {
     );
 
     // pad to 4 bytes
-    let padding = (4 - (bytes.len() % 4)) % 4;
-    bytes.extend(vec![0; padding]);
+    #[cfg(not(feature = "compress"))]
+    {
+        let padding = (4 - (bytes.len() % 4)) % 4;
+        bytes.extend(vec![0; padding]);
+    }
 
     #[cfg(feature = "compress")]
     let bytes = miniz_oxide::deflate::compress_to_vec(&bytes, 9);
