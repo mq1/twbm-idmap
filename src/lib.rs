@@ -34,7 +34,7 @@ static DATA: std::sync::LazyLock<Box<Data>> = std::sync::LazyLock::new(|| {
     unsafe { buf.assume_init() }
 });
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct GameEntry(usize);
 
