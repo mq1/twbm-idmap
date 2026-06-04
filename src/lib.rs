@@ -3,12 +3,14 @@
 
 #![warn(clippy::all, rust_2018_idioms)]
 
+use std::num::NonZero;
+
 include!(concat!(env!("OUT_DIR"), "/id_map_meta.rs"));
 
 #[repr(C)]
 struct Data {
     pub game_ids: [u32; COUNT],
-    pub ghids: [u32; COUNT],
+    pub ghids: [Option<NonZero<u32>>; COUNT],
     pub title_offsets: [u32; COUNT + 1],
     pub titles: [u8; TITLES_LEN],
 }
@@ -41,14 +43,13 @@ pub struct GameEntry(usize);
 impl GameEntry {
     #[inline]
     pub fn lookup(id: impl AsRef<str>) -> Option<Self> {
-        let base36 = u32::from_str_radix(id.as_ref(), 36).ok()?;
-        DATA.game_ids.binary_search(&base36).ok().map(Self)
+        let id = u32::from_str_radix(id.as_ref(), 36).ok()?;
+        DATA.game_ids.binary_search(&id).ok().map(Self)
     }
 
     #[inline]
-    pub fn ghid(&self) -> Option<u32> {
-        let ghid = unsafe { *DATA.ghids.get_unchecked(self.0) };
-        (ghid > 0).then_some(ghid)
+    pub fn ghid(&self) -> Option<NonZero<u32>> {
+        unsafe { *DATA.ghids.get_unchecked(self.0) }
     }
 
     #[inline]
@@ -56,6 +57,7 @@ impl GameEntry {
         let start = unsafe { *DATA.title_offsets.get_unchecked(self.0) } as usize;
         let end = unsafe { *DATA.title_offsets.get_unchecked(self.0 + 1) } as usize;
         let slice = unsafe { DATA.titles.get_unchecked(start..end) };
+
         unsafe { std::str::from_utf8_unchecked(slice) }
     }
 }
