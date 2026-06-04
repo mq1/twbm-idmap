@@ -1,9 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Manuel Quarneti <mq1@ik.me>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-use std::io::Write;
-use std::path::Path;
-use std::{env, fs};
+use std::{fs, path::PathBuf};
 
 struct GameEntry {
     id: u32,
@@ -68,20 +66,21 @@ fn parse_gamehacking_ids(entries: &mut [GameEntry]) {
     }
 }
 
+fn encode_u32(value: u32, target_endian: &str) -> [u8; 4] {
+    match target_endian {
+        "big" => value.to_be_bytes(),
+        "little" => value.to_le_bytes(),
+        _ => unreachable!(),
+    }
+}
+
 fn main() {
     println!("cargo::rerun-if-changed=build.rs");
     println!("cargo::rerun-if-changed=assets/wiitdb.txt");
     println!("cargo::rerun-if-changed=assets/gamehacking/**");
 
-    let target_endian = env::var("CARGO_CFG_TARGET_ENDIAN").unwrap();
-    assert!(target_endian == "little" || target_endian == "big");
-    let encode_u32 = |value: u32| -> [u8; 4] {
-        if target_endian == "big" {
-            value.to_be_bytes()
-        } else {
-            value.to_le_bytes()
-        }
-    };
+    let target_endian = std::env::var("CARGO_CFG_TARGET_ENDIAN").unwrap();
+    let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
 
     let mut entries = make_id_map();
     parse_gamehacking_ids(&mut entries);
@@ -90,26 +89,33 @@ fn main() {
 
     // first the ids
     for entry in &entries {
-        bytes.write_all(&encode_u32(entry.id)).unwrap();
+        let slice = encode_u32(entry.id, &target_endian);
+        bytes.extend_from_slice(&slice);
     }
 
     // then the ghids
     for entry in &entries {
-        bytes.write_all(&encode_u32(entry.ghid)).unwrap();
+        let slice = encode_u32(entry.ghid, &target_endian);
+        bytes.extend_from_slice(&slice);
     }
 
     // then the title offsets
     let mut cursor = 0u32;
     for entry in &entries {
-        bytes.write_all(&encode_u32(cursor)).unwrap();
+        let slice = encode_u32(cursor, &target_endian);
+        bytes.extend_from_slice(&slice);
         let len = u32::try_from(entry.title.len()).unwrap();
         cursor = cursor.checked_add(len).unwrap();
     }
-    bytes.write_all(&encode_u32(cursor)).unwrap();
+
+    // then TITLES_LEN as the last offset
+    let slice = encode_u32(cursor, &target_endian);
+    bytes.extend_from_slice(&slice);
 
     // then the titles
     for entry in &entries {
-        bytes.write_all(entry.title.as_bytes()).unwrap();
+        let slice = entry.title.as_bytes();
+        bytes.extend_from_slice(slice);
     }
 
     let meta = format!(
@@ -128,9 +134,9 @@ fn main() {
     #[cfg(feature = "compress")]
     let bytes = miniz_oxide::deflate::compress_to_vec(&bytes, 9);
 
-    let out_path = Path::new(&env::var("OUT_DIR").unwrap()).join("id_map.bin");
+    let out_path = out_dir.join("id_map.bin");
     fs::write(out_path, bytes).unwrap();
 
-    let out_path = Path::new(&env::var("OUT_DIR").unwrap()).join("id_map_meta.rs");
+    let out_path = out_dir.join("id_map_meta.rs");
     fs::write(out_path, meta).unwrap();
 }
