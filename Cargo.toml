@@ -1,6 +1,6 @@
 [package]
 name = "twbm-idmap"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 rust-version = "1.85"
 authors = ["Manuel Quarneti <mq1@ik.me>"]
@@ -15,7 +15,7 @@ default = []
 compress = ["dep:miniz_oxide"]
 
 [dependencies]
-miniz_oxide = { version = "0.9", optional = true }
+miniz_oxide = { version = "0.9", optional = true, default-features = false }
 
 [build-dependencies]
 miniz_oxide = { version = "0.9", optional = true }
