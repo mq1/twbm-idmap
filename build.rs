@@ -94,6 +94,7 @@ fn main() {
     }
 
     // then the ghids
+    #[cfg(feature = "gamehacking")]
     for entry in &entries {
         let slice = encode_u32(entry.ghid, &target_endian);
         bytes.extend_from_slice(&slice);
@@ -126,10 +127,7 @@ fn main() {
 
     // pad to 4 bytes
     #[cfg(not(feature = "compress"))]
-    {
-        let padding = (4 - (bytes.len() % 4)) % 4;
-        bytes.extend(vec![0; padding]);
-    }
+    bytes.resize((bytes.len() + 3) & !3, 0);
 
     #[cfg(feature = "compress")]
     let bytes = miniz_oxide::deflate::compress_to_vec(&bytes, 9);

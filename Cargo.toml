@@ -1,6 +1,6 @@
 [package]
 name = "twbm-idmap"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.85"
 authors = ["Manuel Quarneti <mq1@ik.me>"]
@@ -12,6 +12,7 @@ include = ["src/**/*", "assets/**/*", "build.rs", "Cargo.toml"]
 
 [features]
 default = []
+gamehacking = []
 compress = ["dep:miniz_oxide"]
 
 [dependencies]

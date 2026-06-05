@@ -19,5 +19,7 @@ fn main() {
     };
 
     println!("Title: {}", entry.title());
+
+    #[cfg(feature = "gamehacking")]
     println!("GameHacking ID: {:?}", entry.ghid());
 }

@@ -3,14 +3,13 @@
 
 #![warn(clippy::all, rust_2018_idioms)]
 
-use std::num::NonZero;
-
 include!(concat!(env!("OUT_DIR"), "/id_map_meta.rs"));
 
 #[repr(C)]
 struct Data {
     pub game_ids: [u32; COUNT],
-    pub ghids: [Option<NonZero<u32>>; COUNT],
+    #[cfg(feature = "gamehacking")]
+    pub ghids: [Option<std::num::NonZero<u32>>; COUNT],
     pub title_offsets: [u32; COUNT + 1],
     pub titles: [u8; TITLES_LEN],
 }
@@ -47,8 +46,9 @@ impl GameEntry {
         DATA.game_ids.binary_search(&id).ok().map(Self)
     }
 
+    #[cfg(feature = "gamehacking")]
     #[inline]
-    pub fn ghid(&self) -> Option<NonZero<u32>> {
+    pub fn ghid(&self) -> Option<std::num::NonZero<u32>> {
         unsafe { *DATA.ghids.get_unchecked(self.0) }
     }
 
