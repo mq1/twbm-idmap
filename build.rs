@@ -5,6 +5,7 @@ use std::{fs, path::PathBuf};
 
 struct GameEntry<'a> {
     id: u32,
+    #[cfg(feature = "gamehacking")]
     ghid: u32,
     title: &'a str,
 }
@@ -16,7 +17,12 @@ fn make_id_map(content: &str) -> Vec<GameEntry<'_>> {
         let (id, title) = line.split_once(" = ").unwrap();
         let id = u32::from_str_radix(id, 36).unwrap();
 
-        entries.push(GameEntry { id, ghid: 0, title });
+        entries.push(GameEntry {
+            id,
+            #[cfg(feature = "gamehacking")]
+            ghid: 0,
+            title,
+        });
     }
 
     entries.sort_by_key(|e| e.id);
@@ -73,6 +79,8 @@ fn main() {
     let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
 
     let titles_txt = fs::read_to_string("assets/wiitdb.txt").unwrap();
+
+    #[cfg_attr(not(feature = "gamehacking"), allow(unused_mut))]
     let mut entries = make_id_map(&titles_txt);
 
     #[cfg(feature = "gamehacking")]
