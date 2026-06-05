@@ -34,6 +34,7 @@ fn make_id_map() -> Vec<GameEntry> {
     entries
 }
 
+#[cfg(feature = "gamehacking")]
 fn parse_gamehacking_ids(entries: &mut [GameEntry]) {
     const GHID_ANCHOR: &str = "href=\"/game/";
     const GAMEID_ANCHOR: &str = "<td class=\"text-center\">";
@@ -83,6 +84,8 @@ fn main() {
     let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
 
     let mut entries = make_id_map();
+
+    #[cfg(feature = "gamehacking")]
     parse_gamehacking_ids(&mut entries);
 
     let mut bytes = Vec::new();
