@@ -3,34 +3,23 @@
 
 use std::{fs, path::PathBuf};
 
-struct GameEntry {
+struct GameEntry<'a> {
     id: u32,
     ghid: u32,
-    title: String,
+    title: &'a str,
 }
 
-fn make_id_map() -> Vec<GameEntry> {
-    let contents = fs::read_to_string("assets/wiitdb.txt").unwrap();
-    let mut lines = contents.lines();
+fn make_id_map(content: &str) -> Vec<GameEntry<'_>> {
+    let mut entries = Vec::with_capacity(16 * 1024);
 
-    // skip heading
-    let _ = lines.next();
+    for line in content.lines().skip(1) {
+        let (id, title) = line.split_once(" = ").unwrap();
+        let id = u32::from_str_radix(id, 36).unwrap();
 
-    let mut entries = lines
-        .map(|line| {
-            let (id, title) = line.split_once(" = ").unwrap();
-            let id = u32::from_str_radix(id, 36).unwrap();
-
-            GameEntry {
-                id,
-                ghid: 0,
-                title: title.to_string(),
-            }
-        })
-        .collect::<Vec<_>>();
+        entries.push(GameEntry { id, ghid: 0, title });
+    }
 
     entries.sort_by_key(|e| e.id);
-
     entries
 }
 
@@ -83,12 +72,13 @@ fn main() {
     let target_endian = std::env::var("CARGO_CFG_TARGET_ENDIAN").unwrap();
     let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
 
-    let mut entries = make_id_map();
+    let titles_txt = fs::read_to_string("assets/wiitdb.txt").unwrap();
+    let mut entries = make_id_map(&titles_txt);
 
     #[cfg(feature = "gamehacking")]
     parse_gamehacking_ids(&mut entries);
 
-    let mut bytes = Vec::new();
+    let mut bytes = Vec::with_capacity(512 * 1024);
 
     // first the ids
     for entry in &entries {
