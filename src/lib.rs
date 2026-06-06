@@ -48,16 +48,22 @@ impl GameEntry {
 
     #[cfg(feature = "gamehacking")]
     #[inline]
+    #[must_use]
     pub fn ghid(&self) -> Option<std::num::NonZero<u32>> {
         unsafe { *DATA.ghids.get_unchecked(self.0) }
     }
 
     #[inline]
+    #[must_use]
     pub fn title(&self) -> &'static str {
-        let start = unsafe { *DATA.title_offsets.get_unchecked(self.0) } as usize;
-        let end = unsafe { *DATA.title_offsets.get_unchecked(self.0 + 1) } as usize;
-        let slice = unsafe { DATA.titles.get_unchecked(start..end) };
+        let data = DATA.as_ref();
 
-        unsafe { std::str::from_utf8_unchecked(slice) }
+        unsafe {
+            let start = *data.title_offsets.get_unchecked(self.0) as usize;
+            let end = *data.title_offsets.get_unchecked(self.0 + 1) as usize;
+            let slice = data.titles.get_unchecked(start..end);
+
+            std::str::from_utf8_unchecked(slice)
+        }
     }
 }
