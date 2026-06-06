@@ -56,6 +56,10 @@ impl GameEntry {
     #[inline]
     #[must_use]
     pub fn title(&self) -> &'static str {
+        #[cfg(not(feature = "compress"))]
+        let data = &DATA;
+
+        #[cfg(feature = "compress")]
         let data = DATA.as_ref();
 
         unsafe {
