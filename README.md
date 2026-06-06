@@ -1,5 +1,9 @@
 # twbm-idmap
 
+[![Latest version](https://img.shields.io/crates/v/twbm-idmap.svg)](https://crates.io/crates/twbm-idmap)
+[![Documentation](https://docs.rs/twbm-idmap/badge.svg)](https://docs.rs/twbm-idmap)
+![License](https://img.shields.io/crates/l/twbm-idmap.svg)
+
 Get Wii/NGC game titles and gamehacking ids from Rust.
 Offline and no dependencies.
 
