@@ -20,6 +20,9 @@ fn main() {
 
     println!("Title: {}", entry.title());
 
+    #[cfg(feature = "ascii-titles")]
+    println!("ASCII Title: {}", entry.ascii_title());
+
     #[cfg(feature = "gamehacking")]
     println!("GameHacking ID: {:?}", entry.ghid());
 }

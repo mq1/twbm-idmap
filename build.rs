@@ -8,6 +8,8 @@ struct GameEntry<'a> {
     #[cfg(feature = "gamehacking")]
     ghid: u32,
     title: &'a str,
+    #[cfg(feature = "ascii-titles")]
+    ascii_title: std::borrow::Cow<'a, str>,
 }
 
 fn make_id_map(content: &str) -> Vec<GameEntry<'_>> {
@@ -17,11 +19,20 @@ fn make_id_map(content: &str) -> Vec<GameEntry<'_>> {
         let (id, title) = line.split_once(" = ").unwrap();
         let id = u32::from_str_radix(id, 36).unwrap();
 
+        #[cfg(feature = "ascii-titles")]
+        let ascii_title = {
+            let ascii = deunicode::deunicode_with_tofu_cow(title, "");
+            assert!(!ascii.is_empty());
+            if ascii == title { "".into() } else { ascii }
+        };
+
         entries.push(GameEntry {
             id,
             #[cfg(feature = "gamehacking")]
             ghid: 0,
             title,
+            #[cfg(feature = "ascii-titles")]
+            ascii_title,
         });
     }
 
@@ -114,9 +125,31 @@ fn main() {
     let slice = encode_u32(cursor, &target_endian);
     bytes.extend_from_slice(&slice);
 
+    #[cfg(feature = "ascii-titles")]
+    {
+        // then the ascii titles offsets
+        for entry in &entries {
+            let slice = encode_u32(cursor, &target_endian);
+            bytes.extend_from_slice(&slice);
+            let len = u32::try_from(entry.ascii_title.len()).unwrap();
+            cursor = cursor.checked_add(len).unwrap();
+        }
+
+        // then TITLES_LEN as the last offset
+        let slice = encode_u32(cursor, &target_endian);
+        bytes.extend_from_slice(&slice);
+    }
+
     // then the titles
     for entry in &entries {
         let slice = entry.title.as_bytes();
+        bytes.extend_from_slice(slice);
+    }
+
+    // then the ascii titles
+    #[cfg(feature = "ascii-titles")]
+    for entry in &entries {
+        let slice = entry.ascii_title.as_bytes();
         bytes.extend_from_slice(slice);
     }
 

@@ -14,9 +14,11 @@ include = ["src/**/*", "assets/**/*", "build.rs", "Cargo.toml"]
 default = []
 gamehacking = []
 compress = ["dep:miniz_oxide"]
+ascii-titles = ["dep:deunicode"]
 
 [dependencies]
 miniz_oxide = { version = "0.9", optional = true, default-features = false }
 
 [build-dependencies]
+deunicode = { version = "1.6", optional = true }
 miniz_oxide = { version = "0.9", optional = true }

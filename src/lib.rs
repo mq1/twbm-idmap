@@ -11,6 +11,8 @@ struct Data {
     #[cfg(feature = "gamehacking")]
     pub ghids: [Option<std::num::NonZero<u32>>; COUNT],
     pub title_offsets: [u32; COUNT + 1],
+    #[cfg(feature = "ascii-titles")]
+    pub ascii_title_offsets: [u32; COUNT + 1],
     pub titles: [u8; TITLES_LEN],
 }
 
@@ -68,6 +70,23 @@ impl GameEntry {
             let slice = data.titles.get_unchecked(start..end);
 
             std::str::from_utf8_unchecked(slice)
+        }
+    }
+
+    #[cfg(feature = "ascii-titles")]
+    #[inline]
+    #[must_use]
+    pub fn ascii_title(&self) -> &'static str {
+        unsafe {
+            let start = *DATA.ascii_title_offsets.get_unchecked(self.0) as usize;
+            let end = *DATA.ascii_title_offsets.get_unchecked(self.0 + 1) as usize;
+
+            if start == end {
+                self.title()
+            } else {
+                let slice = DATA.titles.get_unchecked(start..end);
+                std::str::from_utf8_unchecked(slice)
+            }
         }
     }
 }
