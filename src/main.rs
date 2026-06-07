@@ -3,8 +3,6 @@
 
 #![warn(clippy::all, rust_2018_idioms)]
 
-use twbm_idmap::GameEntry;
-
 const USAGE: &str = "Usage: twbm-idmap <GAMEID>";
 
 fn main() {
@@ -13,16 +11,18 @@ fn main() {
         std::process::exit(1);
     };
 
-    let Some(entry) = GameEntry::lookup(&game_id) else {
-        eprintln!("GameID {game_id} not found");
-        std::process::exit(1);
-    };
-
-    println!("Title: {}", entry.title());
+    let title = twbm_idmap::get_title(&game_id);
+    println!("Title: {title:?}");
 
     #[cfg(feature = "ascii-titles")]
-    println!("ASCII Title: {}", entry.ascii_title());
+    {
+        let ascii_title = twbm_idmap::get_ascii_title(&game_id);
+        println!("ASCII Title: {ascii_title:?}");
+    }
 
     #[cfg(feature = "gamehacking")]
-    println!("GameHacking ID: {:?}", entry.ghid());
+    {
+        let ghid = twbm_idmap::get_ghid(&game_id);
+        println!("GameHacking ID: {ghid:?}");
+    }
 }
