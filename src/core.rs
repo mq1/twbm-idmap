@@ -21,32 +21,28 @@ struct Data {
     pub titles: [u8; TITLES_LEN],
 }
 
+#[cfg(not(feature = "compress"))]
 const BYTES: &[u8; DATA_SIZE] = include_bytes!(concat!(env!("OUT_DIR"), "/id_map.bin"));
 
-#[cfg(not(feature = "compress"))]
-#[inline]
-fn data() -> &'static Data {
-    let ptr = BYTES.as_ptr().cast::<Data>();
-    unsafe { ptr.as_ref_unchecked() }
-}
-
 #[cfg(feature = "compress")]
-static DATA: std::sync::LazyLock<Box<Data>> = std::sync::LazyLock::new(|| {
-    let mut buf = Box::<Data>::new_uninit();
+static BYTES: std::sync::LazyLock<Box<[u8]>> = std::sync::LazyLock::new(|| {
+    let compressed = include_bytes!(concat!(env!("OUT_DIR"), "/id_map.bin"));
+
+    let mut buf = Box::new_uninit_slice(DATA_SIZE);
 
     // inflate directly into the buffer
     let ptr = buf.as_mut_ptr().cast::<u8>();
-    let slice = unsafe { std::slice::from_raw_parts_mut(ptr, std::mem::size_of::<Data>()) };
-    let it = std::iter::once(&BYTES[..]);
+    let slice = unsafe { std::slice::from_raw_parts_mut(ptr, DATA_SIZE) };
+    let it = std::iter::once(compressed.as_ref());
     miniz_oxide::inflate::decompress_slice_iter_to_slice(slice, it, false, true).unwrap();
 
     unsafe { buf.assume_init() }
 });
 
-#[cfg(feature = "compress")]
 #[inline]
 fn data() -> &'static Data {
-    DATA.as_ref()
+    let ptr = BYTES.as_ptr().cast::<Data>();
+    unsafe { ptr.as_ref_unchecked() }
 }
 
 pub fn get_title(game_id: u32) -> Option<&'static str> {
