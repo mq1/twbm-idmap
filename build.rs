@@ -1,38 +1,43 @@
 // SPDX-FileCopyrightText: 2026 Manuel Quarneti <mq1@ik.me>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-use std::{fs, path::PathBuf};
+use std::{collections::BTreeMap, fs, path::PathBuf};
 
-struct GameEntry<'a> {
-    id: u32,
-    #[cfg(feature = "gamehacking")]
-    ghid: u32,
-    title: &'a str,
-}
-
-fn make_id_map(content: &str) -> Vec<GameEntry<'_>> {
-    let mut entries = Vec::with_capacity(16 * 1024);
+fn make_title_map<'a>(content: &'a str) -> BTreeMap<u32, &'a str> {
+    let mut entries = BTreeMap::new();
 
     for line in content.lines().skip(1) {
         let (id, title) = line.split_once(" = ").unwrap();
         let id = u32::from_str_radix(id, 36).unwrap();
 
-        entries.push(GameEntry {
-            id,
-            #[cfg(feature = "gamehacking")]
-            ghid: 0,
-            title,
-        });
+        entries.insert(id, title);
     }
 
-    entries.sort_by_key(|e| e.id);
+    entries
+}
+
+#[cfg(feature = "ascii-titles")]
+fn make_ascii_map<'a>(
+    title_map: &'a BTreeMap<u32, &'a str>,
+) -> BTreeMap<u32, std::borrow::Cow<'a, str>> {
+    let mut entries = BTreeMap::new();
+
+    for (id, title) in title_map {
+        let ascii_title = deunicode::deunicode_with_tofu_cow(*title, "");
+        if !ascii_title.is_empty() && ascii_title != *title {
+            entries.insert(*id, ascii_title);
+        }
+    }
+
     entries
 }
 
 #[cfg(feature = "gamehacking")]
-fn parse_gamehacking_ids(entries: &mut [GameEntry]) {
+fn parse_gamehacking_ids() -> BTreeMap<u32, u32> {
     const GHID_ANCHOR: &str = "href=\"/game/";
     const GAMEID_ANCHOR: &str = "<td class=\"text-center\">";
+
+    let mut entries = BTreeMap::new();
 
     for i in 0..=70 {
         let filename = format!("assets/gamehacking/GameHacking.org - WII - Page {i}.html");
@@ -45,21 +50,26 @@ fn parse_gamehacking_ids(entries: &mut [GameEntry]) {
             let quote_pos = current_slice.find('"').unwrap();
             let ghid_str = &current_slice[..quote_pos];
             let ghid = ghid_str.parse().unwrap();
+            if ghid == 0 {
+                continue;
+            }
 
             let gameid_pos = current_slice.find(GAMEID_ANCHOR).unwrap();
             current_slice = &current_slice[gameid_pos + GAMEID_ANCHOR.len()..];
             let td_close_pos = current_slice.find('<').unwrap();
             let gameid_str = current_slice[..td_close_pos].trim();
-            if !matches!(gameid_str.len(), 4 | 6) {
+            let gameid_str_len = gameid_str.len();
+            if gameid_str_len != 4 && gameid_str_len != 6 {
                 continue;
             }
+
             let gameid = u32::from_str_radix(gameid_str, 36).unwrap();
 
-            if let Ok(i) = entries.binary_search_by_key(&gameid, |e| e.id) {
-                entries[i].ghid = ghid;
-            }
+            entries.insert(gameid, ghid);
         }
     }
+
+    entries
 }
 
 fn encode_u32(value: u32, target_endian: &str) -> [u8; 4] {
@@ -79,52 +89,105 @@ fn main() {
     let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
 
     let titles_txt = fs::read_to_string("assets/wiitdb.txt").unwrap();
-
-    #[cfg_attr(not(feature = "gamehacking"), allow(unused_mut))]
-    let mut entries = make_id_map(&titles_txt);
+    let title_map = make_title_map(&titles_txt);
 
     #[cfg(feature = "gamehacking")]
-    parse_gamehacking_ids(&mut entries);
+    let gamehacking_map = parse_gamehacking_ids();
+
+    #[cfg(feature = "ascii-titles")]
+    let ascii_map = make_ascii_map(&title_map);
 
     let mut bytes = Vec::with_capacity(512 * 1024);
 
-    // first the ids
-    for entry in &entries {
-        let slice = encode_u32(entry.id, &target_endian);
-        bytes.extend_from_slice(&slice);
+    // title map game ids
+    for (id, _title) in &title_map {
+        let id_slice = encode_u32(*id, &target_endian);
+        bytes.extend_from_slice(&id_slice);
     }
 
-    // then the ghids
-    #[cfg(feature = "gamehacking")]
-    for entry in &entries {
-        let slice = encode_u32(entry.ghid, &target_endian);
-        bytes.extend_from_slice(&slice);
-    }
-
-    // then the title offsets
+    // title map title offsets
     let mut cursor = 0u32;
-    for entry in &entries {
-        let slice = encode_u32(cursor, &target_endian);
-        bytes.extend_from_slice(&slice);
-        let len = u32::try_from(entry.title.len()).unwrap();
+    for (_, title) in &title_map {
+        let title_offset_slice = encode_u32(cursor, &target_endian);
+        bytes.extend_from_slice(&title_offset_slice);
+
+        let len = u32::try_from(title.len()).unwrap();
         cursor = cursor.checked_add(len).unwrap();
     }
 
-    // then TITLES_LEN as the last offset
-    let slice = encode_u32(cursor, &target_endian);
-    bytes.extend_from_slice(&slice);
+    // titles end marker
+    let titles_end = encode_u32(cursor, &target_endian);
+    bytes.extend_from_slice(&titles_end);
 
-    // then the titles
-    for entry in &entries {
-        let slice = entry.title.as_bytes();
-        bytes.extend_from_slice(slice);
+    // gamehacking game ids
+    #[cfg(feature = "gamehacking")]
+    for (id, _) in &gamehacking_map {
+        let id_slice = encode_u32(*id, &target_endian);
+        bytes.extend_from_slice(&id_slice);
     }
 
-    let meta = format!(
-        "const COUNT: usize = {}; const TITLES_LEN: usize = {};",
-        entries.len(),
-        cursor
+    // gamehacking ghids
+    #[cfg(feature = "gamehacking")]
+    for (_, ghid) in &gamehacking_map {
+        let ghid_slice = encode_u32(*ghid, &target_endian);
+        bytes.extend_from_slice(&ghid_slice);
+    }
+
+    // ascii title map game ids
+    #[cfg(feature = "ascii-titles")]
+    for (id, _) in &ascii_map {
+        let id_slice = encode_u32(*id, &target_endian);
+        bytes.extend_from_slice(&id_slice);
+    }
+
+    // ascii title map title offsets
+    #[cfg(feature = "ascii-titles")]
+    for (_, ascii_title) in &ascii_map {
+        let title_offset_slice = encode_u32(cursor, &target_endian);
+        bytes.extend_from_slice(&title_offset_slice);
+
+        let len = u32::try_from(ascii_title.len()).unwrap();
+        cursor = cursor.checked_add(len).unwrap();
+    }
+
+    // ascii titles end marker
+    #[cfg(feature = "ascii-titles")]
+    {
+        let ascii_titles_end = encode_u32(cursor, &target_endian);
+        bytes.extend_from_slice(&ascii_titles_end);
+    }
+
+    // titles: [u8]
+    for (_, title) in &title_map {
+        let title_bytes = title.as_bytes();
+        bytes.extend_from_slice(title_bytes);
+    }
+
+    // ascii titles: [u8]
+    #[cfg(feature = "ascii-titles")]
+    for (_, ascii_title) in &ascii_map {
+        let title_bytes = ascii_title.as_bytes();
+        bytes.extend_from_slice(title_bytes);
+    }
+
+    #[allow(unused_mut)]
+    let mut meta = format!(
+        "const TITLE_COUNT: usize = {}; const TITLES_LEN: usize = {};",
+        title_map.len(),
+        cursor,
     );
+
+    #[cfg(feature = "gamehacking")]
+    meta.push_str(&format!(
+        "const GHID_COUNT: usize = {};",
+        gamehacking_map.len()
+    ));
+
+    #[cfg(feature = "ascii-titles")]
+    meta.push_str(&format!(
+        "const ASCII_TITLE_COUNT: usize = {};",
+        ascii_map.len(),
+    ));
 
     // pad to 4 bytes
     #[cfg(not(feature = "compress"))]

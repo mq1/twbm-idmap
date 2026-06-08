@@ -1,0 +1,34 @@
+name: Check
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  check-all:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Install rust toolchain
+        uses: dtolnay/rust-toolchain@1.85
+
+      - name: test (no features)
+        run: cargo run -- RMCE01
+
+      - name: test (compression)
+        run: cargo run --features compress -- RMCE01
+
+      - name: test (gamehacking)
+        run: cargo run --features gamehacking -- RMCE01
+
+      - name: test (ascii-titles)
+        run: cargo run --features ascii-titles -- STGJAF
+
+      - name: test (all features)
+        run: cargo run --features compress,gamehacking,ascii-titles -- STGJAF
