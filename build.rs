@@ -3,7 +3,7 @@
 
 use std::{collections::BTreeMap, fs, path::PathBuf};
 
-fn make_title_map<'a>(content: &'a str) -> BTreeMap<u32, &'a str> {
+fn make_title_map(content: &str) -> BTreeMap<u32, &str> {
     let mut entries = BTreeMap::new();
 
     for line in content.lines().skip(1) {
@@ -100,14 +100,14 @@ fn main() {
     let mut bytes = Vec::with_capacity(512 * 1024);
 
     // title map game ids
-    for (id, _title) in &title_map {
+    for id in title_map.keys() {
         let id_slice = encode_u32(*id, &target_endian);
         bytes.extend_from_slice(&id_slice);
     }
 
     // title map title offsets
     let mut cursor = 0u32;
-    for (_, title) in &title_map {
+    for title in title_map.values() {
         let title_offset_slice = encode_u32(cursor, &target_endian);
         bytes.extend_from_slice(&title_offset_slice);
 
@@ -158,7 +158,7 @@ fn main() {
     }
 
     // titles: [u8]
-    for (_, title) in &title_map {
+    for title in title_map.values() {
         let title_bytes = title.as_bytes();
         bytes.extend_from_slice(title_bytes);
     }
