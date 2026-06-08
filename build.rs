@@ -193,6 +193,8 @@ fn main() {
     #[cfg(not(feature = "compress"))]
     bytes.resize((bytes.len() + 3) & !3, 0);
 
+    meta.push_str(&format!("const DATA_SIZE: usize = {};", bytes.len()));
+
     #[cfg(feature = "compress")]
     let bytes = miniz_oxide::deflate::compress_to_vec(&bytes, 9);
 
