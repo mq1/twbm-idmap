@@ -121,28 +121,28 @@ fn main() {
 
     // gamehacking game ids
     #[cfg(feature = "gamehacking")]
-    for (id, _) in &gamehacking_map {
+    for id in gamehacking_map.keys() {
         let id_slice = encode_u32(*id, &target_endian);
         bytes.extend_from_slice(&id_slice);
     }
 
     // gamehacking ghids
     #[cfg(feature = "gamehacking")]
-    for (_, ghid) in &gamehacking_map {
+    for ghid in gamehacking_map.values() {
         let ghid_slice = encode_u32(*ghid, &target_endian);
         bytes.extend_from_slice(&ghid_slice);
     }
 
     // ascii title map game ids
     #[cfg(feature = "ascii-titles")]
-    for (id, _) in &ascii_map {
+    for id in ascii_map.keys() {
         let id_slice = encode_u32(*id, &target_endian);
         bytes.extend_from_slice(&id_slice);
     }
 
     // ascii title map title offsets
     #[cfg(feature = "ascii-titles")]
-    for (_, ascii_title) in &ascii_map {
+    for ascii_title in ascii_map.values() {
         let title_offset_slice = encode_u32(cursor, &target_endian);
         bytes.extend_from_slice(&title_offset_slice);
 
@@ -165,7 +165,7 @@ fn main() {
 
     // ascii titles: [u8]
     #[cfg(feature = "ascii-titles")]
-    for (_, ascii_title) in &ascii_map {
+    for ascii_title in ascii_map.values() {
         let title_bytes = ascii_title.as_bytes();
         bytes.extend_from_slice(title_bytes);
     }
