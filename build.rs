@@ -1,32 +1,90 @@
 // SPDX-FileCopyrightText: 2026 Manuel Quarneti <mq1@ik.me>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
+use rkyv::rancor;
 use std::{collections::BTreeMap, fs, path::PathBuf};
 
-fn make_title_map(content: &str) -> BTreeMap<u32, &str> {
-    let mut entries = BTreeMap::new();
-
-    for line in content.lines().skip(1) {
-        let (id, title) = line.split_once(" = ").unwrap();
-        let id = u32::from_str_radix(id, 36).unwrap();
-
-        entries.insert(id, title);
-    }
-
-    entries
+#[cfg(feature = "hashes")]
+#[derive(serde::Deserialize)]
+struct WiiTdbRom {
+    #[serde(rename = "@crc", default)]
+    crc: String,
 }
 
-#[cfg(feature = "ascii-titles")]
-fn make_ascii_map<'a>(
-    title_map: &'a BTreeMap<u32, &'a str>,
-) -> BTreeMap<u32, std::borrow::Cow<'a, str>> {
+#[derive(serde::Deserialize)]
+struct WiiTdbLocale<'a> {
+    #[serde(borrow, rename = "@lang")]
+    lang: &'a str,
+
+    // This needs to be owned to be serialized by rkyv
+    title: String,
+}
+
+#[derive(serde::Deserialize)]
+struct WiiTdbGame<'a> {
+    #[serde(borrow)]
+    id: &'a str,
+
+    #[serde(borrow, rename = "locale", default)]
+    locales: Vec<WiiTdbLocale<'a>>,
+
+    #[cfg(feature = "hashes")]
+    #[serde(rename = "rom")]
+    roms: Vec<WiiTdbRom>,
+}
+
+#[derive(serde::Deserialize)]
+struct WiiTdbDatafile<'a> {
+    #[serde(borrow, rename = "game")]
+    games: Vec<WiiTdbGame<'a>>,
+}
+
+#[derive(rkyv::Archive, rkyv::Serialize)]
+struct Game {
+    title: String,
+
+    #[cfg(feature = "hashes")]
+    crc32s: Vec<u32>,
+}
+
+#[derive(rkyv::Archive, rkyv::Serialize)]
+struct Data {
+    title_map: BTreeMap<u32, Game>,
+
+    #[cfg(feature = "gamehacking")]
+    gamehacking_map: BTreeMap<u32, u32>,
+}
+
+fn make_title_map(content: &str) -> BTreeMap<u32, Game> {
     let mut entries = BTreeMap::new();
 
-    for (id, title) in title_map {
-        let ascii_title = deunicode::deunicode_with_tofu_cow(*title, "");
-        if !ascii_title.is_empty() && ascii_title != *title {
-            entries.insert(*id, ascii_title);
-        }
+    let datafile = quick_xml::de::from_str::<WiiTdbDatafile>(content).unwrap();
+    for game in datafile.games.into_iter().filter(|g| !g.locales.is_empty()) {
+        let game_id = u32::from_str_radix(game.id, 36).unwrap();
+
+        let title = game
+            .locales
+            .into_iter()
+            .find(|l| l.lang == "EN")
+            .unwrap()
+            .title;
+
+        #[cfg(feature = "hashes")]
+        let crc32s = game
+            .roms
+            .iter()
+            .filter(|r| !r.crc.is_empty())
+            .filter_map(|r| u32::from_str_radix(&r.crc, 16).ok())
+            .collect();
+
+        let game = Game {
+            title,
+
+            #[cfg(feature = "hashes")]
+            crc32s,
+        };
+
+        entries.insert(game_id, game);
     }
 
     entries
@@ -72,134 +130,40 @@ fn parse_gamehacking_ids() -> BTreeMap<u32, u32> {
     entries
 }
 
-fn encode_u32(value: u32, target_endian: &str) -> [u8; 4] {
-    match target_endian {
-        "big" => value.to_be_bytes(),
-        "little" => value.to_le_bytes(),
-        _ => unreachable!(),
-    }
-}
-
 fn main() {
     println!("cargo::rerun-if-changed=build.rs");
     println!("cargo::rerun-if-changed=assets/wiitdb.txt");
     println!("cargo::rerun-if-changed=assets/gamehacking/**");
 
-    let target_endian = std::env::var("CARGO_CFG_TARGET_ENDIAN").unwrap();
-    let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
-
-    let titles_txt = fs::read_to_string("assets/wiitdb.txt").unwrap();
+    let titles_txt = fs::read_to_string("assets/wiitdb.xml").unwrap();
     let title_map = make_title_map(&titles_txt);
 
     #[cfg(feature = "gamehacking")]
     let gamehacking_map = parse_gamehacking_ids();
 
-    #[cfg(feature = "ascii-titles")]
-    let ascii_map = make_ascii_map(&title_map);
+    let data = Data {
+        title_map,
 
-    let mut bytes = Vec::with_capacity(512 * 1024);
+        #[cfg(feature = "gamehacking")]
+        gamehacking_map,
+    };
 
-    // title map game ids
-    for id in title_map.keys() {
-        let id_slice = encode_u32(*id, &target_endian);
-        bytes.extend_from_slice(&id_slice);
-    }
+    let bytes = rkyv::to_bytes::<rancor::Error>(&data).unwrap();
 
-    // title map title offsets
-    let mut cursor = 0u32;
-    for title in title_map.values() {
-        let title_offset_slice = encode_u32(cursor, &target_endian);
-        bytes.extend_from_slice(&title_offset_slice);
-
-        let len = u32::try_from(title.len()).unwrap();
-        cursor = cursor.checked_add(len).unwrap();
-    }
-
-    // titles end marker
-    let titles_end = encode_u32(cursor, &target_endian);
-    bytes.extend_from_slice(&titles_end);
-
-    // gamehacking game ids
-    #[cfg(feature = "gamehacking")]
-    for id in gamehacking_map.keys() {
-        let id_slice = encode_u32(*id, &target_endian);
-        bytes.extend_from_slice(&id_slice);
-    }
-
-    // gamehacking ghids
-    #[cfg(feature = "gamehacking")]
-    for ghid in gamehacking_map.values() {
-        let ghid_slice = encode_u32(*ghid, &target_endian);
-        bytes.extend_from_slice(&ghid_slice);
-    }
-
-    // ascii title map game ids
-    #[cfg(feature = "ascii-titles")]
-    for id in ascii_map.keys() {
-        let id_slice = encode_u32(*id, &target_endian);
-        bytes.extend_from_slice(&id_slice);
-    }
-
-    // ascii title map title offsets
-    #[cfg(feature = "ascii-titles")]
-    for ascii_title in ascii_map.values() {
-        let title_offset_slice = encode_u32(cursor, &target_endian);
-        bytes.extend_from_slice(&title_offset_slice);
-
-        let len = u32::try_from(ascii_title.len()).unwrap();
-        cursor = cursor.checked_add(len).unwrap();
-    }
-
-    // ascii titles end marker
-    #[cfg(feature = "ascii-titles")]
-    {
-        let ascii_titles_end = encode_u32(cursor, &target_endian);
-        bytes.extend_from_slice(&ascii_titles_end);
-    }
-
-    // titles: [u8]
-    for title in title_map.values() {
-        let title_bytes = title.as_bytes();
-        bytes.extend_from_slice(title_bytes);
-    }
-
-    // ascii titles: [u8]
-    #[cfg(feature = "ascii-titles")]
-    for ascii_title in ascii_map.values() {
-        let title_bytes = ascii_title.as_bytes();
-        bytes.extend_from_slice(title_bytes);
-    }
-
-    #[allow(unused_mut)]
-    let mut meta = format!(
-        "const TITLE_COUNT: usize = {}; const TITLES_LEN: usize = {};",
-        title_map.len(),
-        cursor,
-    );
-
-    #[cfg(feature = "gamehacking")]
-    meta.push_str(&format!(
-        "const GHID_COUNT: usize = {};",
-        gamehacking_map.len()
-    ));
-
-    #[cfg(feature = "ascii-titles")]
-    meta.push_str(&format!(
-        "const ASCII_TITLE_COUNT: usize = {};",
-        ascii_map.len(),
-    ));
-
-    // pad to 4 bytes
-    bytes.resize((bytes.len() + 3) & !3, 0);
-
-    meta.push_str(&format!("const DATA_SIZE: usize = {};", bytes.len()));
+    #[cfg(feature = "compress")]
+    let meta = format!("const DATA_SIZE: usize = {};", bytes.len());
 
     #[cfg(feature = "compress")]
     let bytes = miniz_oxide::deflate::compress_to_vec(&bytes, 9);
 
+    let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
+
     let out_path = out_dir.join("id_map.bin");
     fs::write(out_path, bytes).unwrap();
 
-    let out_path = out_dir.join("id_map_meta.rs");
-    fs::write(out_path, meta).unwrap();
+    #[cfg(feature = "compress")]
+    {
+        let meta_path = out_dir.join("id_map_meta.rs");
+        fs::write(meta_path, meta).unwrap();
+    }
 }

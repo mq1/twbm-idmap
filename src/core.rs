@@ -1,83 +1,92 @@
 // SPDX-FileCopyrightText: 2026 Manuel Quarneti <mq1@ik.me>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
+use std::collections::BTreeMap;
+
+#[cfg(feature = "compress")]
 include!(concat!(env!("OUT_DIR"), "/id_map_meta.rs"));
 
-#[repr(C)]
+#[derive(rkyv::Archive, rkyv::Deserialize)]
+struct Game {
+    title: String,
+
+    #[cfg(feature = "hashes")]
+    crc32s: Vec<u32>,
+}
+
+#[derive(rkyv::Archive, rkyv::Deserialize)]
 struct Data {
-    pub title_map_ids: [u32; TITLE_COUNT],
-    pub title_map_title_offsets: [u32; TITLE_COUNT + 1],
+    title_map: BTreeMap<u32, Game>,
 
     #[cfg(feature = "gamehacking")]
-    pub gamehacking_map_ids: [u32; GHID_COUNT],
-    #[cfg(feature = "gamehacking")]
-    pub gamehacking_map_ghids: [u32; GHID_COUNT],
-
-    #[cfg(feature = "ascii-titles")]
-    pub ascii_title_map_ids: [u32; ASCII_TITLE_COUNT],
-    #[cfg(feature = "ascii-titles")]
-    pub ascii_title_map_title_offsets: [u32; ASCII_TITLE_COUNT + 1],
-
-    pub titles: [u8; TITLES_LEN],
+    gamehacking_map: BTreeMap<u32, u32>,
 }
 
 #[cfg(not(feature = "compress"))]
-const BYTES: &[u8; DATA_SIZE] = include_bytes!(concat!(env!("OUT_DIR"), "/id_map.bin"));
+#[repr(C, align(4))]
+struct AlignedBytes<T: ?Sized>(T);
+
+#[cfg(not(feature = "compress"))]
+static BYTES: &AlignedBytes<[u8]> =
+    &AlignedBytes(*include_bytes!(concat!(env!("OUT_DIR"), "/id_map.bin")));
+
+#[cfg(not(feature = "compress"))]
+#[inline]
+fn data() -> &'static ArchivedData {
+    unsafe { rkyv::access_unchecked(&BYTES.0) }
+}
 
 #[cfg(feature = "compress")]
-static BYTES: std::sync::LazyLock<Box<[u8]>> = std::sync::LazyLock::new(|| {
+static BYTES: std::sync::LazyLock<rkyv::util::AlignedVec<4>> = std::sync::LazyLock::new(|| {
     let compressed = include_bytes!(concat!(env!("OUT_DIR"), "/id_map.bin"));
 
-    let mut buf = Box::new_uninit_slice(DATA_SIZE);
+    let mut buf = rkyv::util::AlignedVec::with_capacity(DATA_SIZE);
+    unsafe { buf.set_len(DATA_SIZE) }
 
-    // inflate directly into the buffer
-    let ptr = buf.as_mut_ptr().cast::<u8>();
-    let slice = unsafe { std::slice::from_raw_parts_mut(ptr, DATA_SIZE) };
-    let it = std::iter::once(compressed.as_ref());
-    miniz_oxide::inflate::decompress_slice_iter_to_slice(slice, it, false, true).unwrap();
+    miniz_oxide::inflate::decompress_slice_iter_to_slice(
+        buf.as_mut_slice(),
+        std::iter::once(compressed.as_ref()),
+        false,
+        true,
+    )
+    .unwrap();
 
-    unsafe { buf.assume_init() }
+    buf
 });
 
+#[cfg(feature = "compress")]
 #[inline]
-fn data() -> &'static Data {
-    let ptr = BYTES.as_ptr().cast::<Data>();
-    unsafe { ptr.as_ref_unchecked() }
+fn data() -> &'static ArchivedData {
+    unsafe { rkyv::access_unchecked(&BYTES) }
 }
 
 pub fn get_title(game_id: u32) -> Option<&'static str> {
-    let data = data();
+    data()
+        .title_map
+        .get(&game_id.into())
+        .map(|game| game.title.as_str())
+}
 
-    let idx = data.title_map_ids.binary_search(&game_id).ok()?;
+#[cfg(feature = "hashes")]
+pub fn is_crc32_hash_known(game_id: u32, hash: u32) -> bool {
+    data()
+        .title_map
+        .get(&game_id.into())
+        .is_some_and(|game| game.crc32s.contains(&hash.into()))
+}
 
-    unsafe {
-        let start = *data.title_map_title_offsets.get_unchecked(idx) as usize;
-        let end = *data.title_map_title_offsets.get_unchecked(idx + 1) as usize;
-        let slice = data.titles.get_unchecked(start..end);
-        Some(std::str::from_utf8_unchecked(slice))
-    }
+#[cfg(feature = "hashes")]
+pub fn get_crc32_hashes(game_id: u32) -> Option<Box<[u32]>> {
+    data()
+        .title_map
+        .get(&game_id.into())
+        .map(|game| game.crc32s.iter().map(std::convert::Into::into).collect())
 }
 
 #[cfg(feature = "gamehacking")]
 pub fn get_ghid(game_id: u32) -> Option<u32> {
-    let data = data();
-
-    let idx = data.gamehacking_map_ids.binary_search(&game_id).ok()?;
-
-    let ghid = unsafe { *data.gamehacking_map_ghids.get_unchecked(idx) };
-    Some(ghid)
-}
-
-#[cfg(feature = "ascii-titles")]
-pub fn get_ascii_title(game_id: u32) -> Option<&'static str> {
-    let data = data();
-
-    let idx = data.ascii_title_map_ids.binary_search(&game_id).ok()?;
-
-    unsafe {
-        let start = *data.ascii_title_map_title_offsets.get_unchecked(idx) as usize;
-        let end = *data.ascii_title_map_title_offsets.get_unchecked(idx + 1) as usize;
-        let slice = data.titles.get_unchecked(start..end);
-        Some(std::str::from_utf8_unchecked(slice))
-    }
+    data()
+        .gamehacking_map
+        .get(&game_id.into())
+        .map(std::convert::Into::into)
 }

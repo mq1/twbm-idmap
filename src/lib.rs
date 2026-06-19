@@ -16,8 +16,17 @@ pub fn get_ghid(game_id: impl AsRef<str>) -> Option<u32> {
     core::get_ghid(game_id)
 }
 
-#[cfg(feature = "ascii-titles")]
-pub fn get_ascii_title(game_id: impl AsRef<str>) -> Option<&'static str> {
+#[cfg(feature = "hashes")]
+pub fn is_crc32_hash_known(game_id: impl AsRef<str>, hash: u32) -> bool {
+    let Ok(game_id) = u32::from_str_radix(game_id.as_ref(), 36) else {
+        return false;
+    };
+
+    core::is_crc32_hash_known(game_id, hash)
+}
+
+#[cfg(feature = "hashes")]
+pub fn get_crc32_hashes(game_id: impl AsRef<str>) -> Option<Box<[u32]>> {
     let game_id = u32::from_str_radix(game_id.as_ref(), 36).ok()?;
-    core::get_ascii_title(game_id).or_else(|| core::get_title(game_id))
+    core::get_crc32_hashes(game_id)
 }
