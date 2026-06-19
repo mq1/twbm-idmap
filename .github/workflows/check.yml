@@ -27,8 +27,8 @@ jobs:
       - name: test (gamehacking)
         run: cargo run --features gamehacking -- RMCE01
 
-      - name: test (ascii-titles)
-        run: cargo run --features ascii-titles -- STGJAF
+      - name: test (hashes)
+        run: cargo run --features hashes -- STGJAF
 
       - name: test (all features)
         run: cargo run --features compress,gamehacking,hashes -- STGJAF
