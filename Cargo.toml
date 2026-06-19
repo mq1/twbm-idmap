@@ -17,11 +17,33 @@ hashes = []
 compress = ["dep:miniz_oxide"]
 
 [dependencies]
-rkyv = { version = "0.8", default-features = false, features = ["std"] }
 miniz_oxide = { version = "0.9", optional = true, default-features = false }
 
+[target.'cfg(target_endian = "little")'.dependencies]
+rkyv = { version = "0.8", default-features = false, features = [
+  "std",
+  "little_endian",
+] }
+
+[target.'cfg(target_endian = "big")'.dependencies]
+rkyv = { version = "0.8", default-features = false, features = [
+  "std",
+  "big_endian",
+] }
+
 [build-dependencies]
-rkyv = { version = "0.8", default-features = false, features = ["std"] }
 serde = { version = "1", features = ["derive"] }
 quick-xml = { version = "0.40", features = ["serialize"] }
 miniz_oxide = { version = "0.9", optional = true }
+
+[target.'cfg(target_endian = "little")'.build-dependencies]
+rkyv = { version = "0.8", default-features = false, features = [
+  "std",
+  "little_endian",
+] }
+
+[target.'cfg(target_endian = "big")'.build-dependencies]
+rkyv = { version = "0.8", default-features = false, features = [
+  "std",
+  "big_endian",
+] }

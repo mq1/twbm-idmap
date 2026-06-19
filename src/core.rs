@@ -76,17 +76,14 @@ pub fn is_crc32_hash_known(game_id: u32, hash: u32) -> bool {
 }
 
 #[cfg(feature = "hashes")]
-pub fn get_crc32_hashes(game_id: u32) -> Option<Box<[u32]>> {
-    data()
-        .title_map
-        .get(&game_id.into())
-        .map(|game| game.crc32s.iter().map(std::convert::Into::into).collect())
+pub fn get_crc32_hashes(game_id: u32) -> Option<&'static [u32]> {
+    data().title_map.get(&game_id.into()).map(|game| {
+        let slice = game.crc32s.as_slice();
+        unsafe { std::slice::from_raw_parts(slice.as_ptr().cast::<u32>(), slice.len()) }
+    })
 }
 
 #[cfg(feature = "gamehacking")]
 pub fn get_ghid(game_id: u32) -> Option<u32> {
-    data()
-        .gamehacking_map
-        .get(&game_id.into())
-        .map(std::convert::Into::into)
+    data().gamehacking_map.get(&game_id.into()).map(Into::into)
 }

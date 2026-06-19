@@ -26,7 +26,7 @@ pub fn is_crc32_hash_known(game_id: impl AsRef<str>, hash: u32) -> bool {
 }
 
 #[cfg(feature = "hashes")]
-pub fn get_crc32_hashes(game_id: impl AsRef<str>) -> Option<Box<[u32]>> {
+pub fn get_crc32_hashes(game_id: impl AsRef<str>) -> Option<&'static [u32]> {
     let game_id = u32::from_str_radix(game_id.as_ref(), 36).ok()?;
     core::get_crc32_hashes(game_id)
 }
