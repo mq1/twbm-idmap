@@ -7,21 +7,19 @@ authors = ["Manuel Quarneti <mq1@ik.me>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/mq1/twbm-idmap"
 homepage = "https://github.com/mq1/twbm-idmap"
-description = "Get Wii/NGC game titles, gamehacking ids and crc32 hashes fully offline"
+description = "Get Wii/NGC game titles, gamehacking ids and crc32 hashes fully offline and with no runtime dependencies"
 include = ["src/**/*", "assets/**/*", "build.rs", "Cargo.toml"]
 
 [features]
 default = []
 gamehacking = []
-hashes = []
+crc32-hashes = []
 compress = ["dep:miniz_oxide"]
 
 [dependencies]
-rkyv = { version = "0.8", default-features = false, features = ["std"]}
 miniz_oxide = { version = "0.9", optional = true, default-features = false }
 
 [build-dependencies]
-rkyv = { version = "0.8", default-features = false, features = ["std"]}
 serde = { version = "1", features = ["derive"] }
 quick-xml = { version = "0.40", features = ["serialize"] }
 miniz_oxide = { version = "0.9", optional = true }

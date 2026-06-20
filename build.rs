@@ -1,20 +1,19 @@
 // SPDX-FileCopyrightText: 2026 Manuel Quarneti <mq1@ik.me>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-use rkyv::rancor;
-use std::{borrow::Cow, collections::BTreeMap, fs, path::PathBuf};
+use std::{borrow::Cow, collections::BTreeMap, fmt::Write, fs, path::PathBuf};
 
-#[cfg(feature = "hashes")]
+#[cfg(feature = "crc32-hashes")]
 #[derive(serde::Deserialize)]
 struct WiiTdbRom<'a> {
-    #[serde(borrow, rename = "@crc", default)]
-    crc: Cow<'a, str>,
+    #[serde(borrow, rename = "@crc")]
+    crc32: Option<Cow<'a, str>>,
 }
 
 #[derive(serde::Deserialize)]
 struct WiiTdbLocale<'a> {
     #[serde(borrow, rename = "@lang")]
-    lang: Cow<'a, str>,
+    lang: &'a str,
 
     #[serde(borrow)]
     title: Cow<'a, str>,
@@ -23,12 +22,12 @@ struct WiiTdbLocale<'a> {
 #[derive(serde::Deserialize)]
 struct WiiTdbGame<'a> {
     #[serde(borrow)]
-    id: Cow<'a, str>,
+    id: &'a str,
 
     #[serde(borrow, rename = "locale", default)]
     locales: Vec<WiiTdbLocale<'a>>,
 
-    #[cfg(feature = "hashes")]
+    #[cfg(feature = "crc32-hashes")]
     #[serde(borrow, rename = "rom")]
     roms: Vec<WiiTdbRom<'a>>,
 }
@@ -39,60 +38,52 @@ struct WiiTdbDatafile<'a> {
     games: Vec<WiiTdbGame<'a>>,
 }
 
-#[derive(rkyv::Archive, rkyv::Serialize)]
-struct Game {
-    title: String,
-
-    #[cfg(feature = "hashes")]
-    crc32s: Vec<u32>,
-}
-
-#[derive(rkyv::Archive, rkyv::Serialize)]
-struct Data {
-    title_map: BTreeMap<u32, Game>,
-
-    #[cfg(feature = "gamehacking")]
-    gamehacking_map: BTreeMap<u32, u32>,
-}
-
-fn make_title_map(content: &str) -> BTreeMap<u32, Game> {
+fn make_title_map<'a>(datafile: &'a WiiTdbDatafile<'a>) -> BTreeMap<u32, &'a str> {
     let mut entries = BTreeMap::new();
 
-    let datafile = quick_xml::de::from_str::<WiiTdbDatafile>(content).unwrap();
-    for game in datafile.games.into_iter().filter(|g| !g.locales.is_empty()) {
-        let game_id = u32::from_str_radix(&game.id, 36).unwrap();
-
-        let title = game
-            .locales
-            .into_iter()
-            .find(|l| l.lang == "EN")
-            .unwrap()
-            .title
-            .into_owned();
-
-        #[cfg(feature = "hashes")]
-        let crc32s = game
-            .roms
-            .iter()
-            .filter(|r| !r.crc.is_empty())
-            .filter_map(|r| u32::from_str_radix(&r.crc, 16).ok())
-            .collect();
-
-        let game = Game {
-            title,
-
-            #[cfg(feature = "hashes")]
-            crc32s,
+    for game in &datafile.games {
+        let Some(en_locale) = game.locales.iter().find(|l| l.lang == "EN") else {
+            continue;
         };
 
-        entries.insert(game_id, game);
+        if en_locale.title.is_empty() || game.id.is_empty() {
+            continue;
+        }
+
+        let game_id = u32::from_str_radix(game.id, 36).unwrap();
+
+        entries.insert(game_id, en_locale.title.as_ref());
+    }
+
+    entries
+}
+
+#[cfg(feature = "crc32-hashes")]
+fn make_hash_map(datafile: &WiiTdbDatafile) -> BTreeMap<u32, u32> {
+    let mut entries = BTreeMap::new();
+
+    for game in &datafile.games {
+        if game.id.is_empty() {
+            continue;
+        }
+
+        let game_id = u32::from_str_radix(game.id, 36).unwrap();
+
+        for rom in &game.roms {
+            if let Some(crc32) = rom.crc32.as_deref()
+                && !crc32.is_empty()
+                && let Ok(crc32) = u32::from_str_radix(crc32, 16)
+            {
+                entries.insert(crc32, game_id);
+            }
+        }
     }
 
     entries
 }
 
 #[cfg(feature = "gamehacking")]
-fn parse_gamehacking_ids() -> BTreeMap<u32, u32> {
+fn make_ghid_map() -> BTreeMap<u32, u32> {
     const GHID_ANCHOR: &str = "href=\"/game/";
     const GAMEID_ANCHOR: &str = "<td class=\"text-center\">";
 
@@ -136,23 +127,88 @@ fn main() {
     println!("cargo::rerun-if-changed=assets/wiitdb.txt");
     println!("cargo::rerun-if-changed=assets/gamehacking/**");
 
-    let titles_txt = fs::read_to_string("assets/wiitdb.xml").unwrap();
-    let title_map = make_title_map(&titles_txt);
-
-    #[cfg(feature = "gamehacking")]
-    let gamehacking_map = parse_gamehacking_ids();
-
-    let data = Data {
-        title_map,
-
-        #[cfg(feature = "gamehacking")]
-        gamehacking_map,
+    let target_endian = std::env::var("CARGO_CFG_TARGET_ENDIAN").unwrap();
+    let encode_u32 = |value: u32| match target_endian.as_str() {
+        "big" => value.to_be_bytes(),
+        "little" => value.to_le_bytes(),
+        _ => unreachable!(),
     };
 
-    let bytes = rkyv::to_bytes::<rancor::Error>(&data).unwrap();
+    let wiitdb = fs::read_to_string("assets/wiitdb.xml").unwrap();
+    let datafile = quick_xml::de::from_str::<WiiTdbDatafile>(&wiitdb).unwrap();
 
-    #[cfg(feature = "compress")]
-    let meta = format!("const DATA_SIZE: usize = {};", bytes.len());
+    #[cfg(feature = "gamehacking")]
+    let ghid_map = make_ghid_map();
+
+    let mut bytes = Vec::with_capacity(1 << 20); // 1 MiB
+    let mut meta = String::new();
+
+    let title_map = make_title_map(&datafile);
+    {
+        // title map game ids
+        for id in title_map.keys() {
+            let id_slice = encode_u32(*id);
+            bytes.extend_from_slice(&id_slice);
+        }
+
+        // title map title offsets
+        let mut cursor = 0u32;
+        for title in title_map.values() {
+            let title_offset_slice = encode_u32(cursor);
+            bytes.extend_from_slice(&title_offset_slice);
+
+            let len = u32::try_from(title.len()).unwrap();
+            cursor = cursor.checked_add(len).unwrap();
+        }
+
+        // titles end marker
+        let titles_end = encode_u32(cursor);
+        bytes.extend_from_slice(&titles_end);
+
+        write!(&mut meta, "const TITLE_COUNT: usize = {};", title_map.len()).unwrap();
+        write!(&mut meta, "const TITLES_LEN: usize = {};", cursor).unwrap();
+    }
+
+    #[cfg(feature = "crc32-hashes")]
+    {
+        let hash_map = make_hash_map(&datafile);
+
+        // hash map crc32s
+        for hash in hash_map.keys() {
+            let crc32s_slice = encode_u32(*hash);
+            bytes.extend_from_slice(&crc32s_slice);
+        }
+
+        // hash map game ids
+        for id in hash_map.values() {
+            let id_slice = encode_u32(*id);
+            bytes.extend_from_slice(&id_slice);
+        }
+
+        write!(&mut meta, "const HASH_COUNT: usize = {};", hash_map.len()).unwrap();
+    }
+
+    #[cfg(feature = "gamehacking")]
+    {
+        // gamehacking game ids
+        for id in ghid_map.keys() {
+            let id_slice = encode_u32(*id);
+            bytes.extend_from_slice(&id_slice);
+        }
+
+        // gamehacking ghids
+        for ghid in ghid_map.values() {
+            let ghid_slice = encode_u32(*ghid);
+            bytes.extend_from_slice(&ghid_slice);
+        }
+
+        write!(&mut meta, "const GHID_COUNT: usize = {};", ghid_map.len()).unwrap();
+    }
+
+    // write titles
+    for title in title_map.into_values() {
+        bytes.extend_from_slice(title.as_bytes());
+    }
 
     #[cfg(feature = "compress")]
     let bytes = miniz_oxide::deflate::compress_to_vec(&bytes, 9);
@@ -162,9 +218,6 @@ fn main() {
     let out_path = out_dir.join("id_map.bin");
     fs::write(out_path, bytes).unwrap();
 
-    #[cfg(feature = "compress")]
-    {
-        let meta_path = out_dir.join("id_map_meta.rs");
-        fs::write(meta_path, meta).unwrap();
-    }
+    let meta_path = out_dir.join("id_map_meta.rs");
+    fs::write(meta_path, meta).unwrap();
 }

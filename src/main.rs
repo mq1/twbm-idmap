@@ -19,11 +19,4 @@ fn main() {
         let ghid = twbm_idmap::get_ghid(&game_id);
         println!("GameHacking ID: {ghid:?}");
     }
-
-    #[cfg(feature = "hashes")]
-    {
-        let hashes = twbm_idmap::get_crc32_hashes(&game_id)
-            .map(|hashes| hashes.map(|hash| format!("{hash:08x}")).collect::<Vec<_>>());
-        println!("CRC32 hashes: {hashes:?}");
-    }
 }
