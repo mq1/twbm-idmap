@@ -22,12 +22,8 @@ fn main() {
 
     #[cfg(feature = "hashes")]
     {
-        let hashes = twbm_idmap::get_crc32_hashes(&game_id).map(|hashes| {
-            hashes
-                .iter()
-                .map(|hash| format!("{hash:08x}"))
-                .collect::<Vec<_>>()
-        });
+        let hashes = twbm_idmap::get_crc32_hashes(&game_id)
+            .map(|hashes| hashes.map(|hash| format!("{hash:08x}")).collect::<Vec<_>>());
         println!("CRC32 hashes: {hashes:?}");
     }
 }
