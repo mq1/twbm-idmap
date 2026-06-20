@@ -2,35 +2,35 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use rkyv::rancor;
-use std::{collections::BTreeMap, fs, path::PathBuf};
+use std::{borrow::Cow, collections::BTreeMap, fs, path::PathBuf};
 
 #[cfg(feature = "hashes")]
 #[derive(serde::Deserialize)]
-struct WiiTdbRom {
-    #[serde(rename = "@crc", default)]
-    crc: String,
+struct WiiTdbRom<'a> {
+    #[serde(borrow, rename = "@crc", default)]
+    crc: Cow<'a, str>,
 }
 
 #[derive(serde::Deserialize)]
 struct WiiTdbLocale<'a> {
     #[serde(borrow, rename = "@lang")]
-    lang: &'a str,
+    lang: Cow<'a, str>,
 
-    // This needs to be owned to be serialized by rkyv
-    title: String,
+    #[serde(borrow)]
+    title: Cow<'a, str>,
 }
 
 #[derive(serde::Deserialize)]
 struct WiiTdbGame<'a> {
     #[serde(borrow)]
-    id: &'a str,
+    id: Cow<'a, str>,
 
     #[serde(borrow, rename = "locale", default)]
     locales: Vec<WiiTdbLocale<'a>>,
 
     #[cfg(feature = "hashes")]
-    #[serde(rename = "rom")]
-    roms: Vec<WiiTdbRom>,
+    #[serde(borrow, rename = "rom")]
+    roms: Vec<WiiTdbRom<'a>>,
 }
 
 #[derive(serde::Deserialize)]
@@ -60,14 +60,15 @@ fn make_title_map(content: &str) -> BTreeMap<u32, Game> {
 
     let datafile = quick_xml::de::from_str::<WiiTdbDatafile>(content).unwrap();
     for game in datafile.games.into_iter().filter(|g| !g.locales.is_empty()) {
-        let game_id = u32::from_str_radix(game.id, 36).unwrap();
+        let game_id = u32::from_str_radix(&game.id, 36).unwrap();
 
         let title = game
             .locales
             .into_iter()
             .find(|l| l.lang == "EN")
             .unwrap()
-            .title;
+            .title
+            .into_owned();
 
         #[cfg(feature = "hashes")]
         let crc32s = game
