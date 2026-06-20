@@ -70,10 +70,13 @@ fn make_hash_map(datafile: &WiiTdbDatafile) -> BTreeMap<u32, u32> {
         let game_id = u32::from_str_radix(game.id, 36).unwrap();
 
         for rom in &game.roms {
-            if let Some(crc32) = rom.crc32.as_deref()
-                && !crc32.is_empty()
-                && let Ok(crc32) = u32::from_str_radix(crc32, 16)
-            {
+            let Some(crc32) = rom.crc32.as_deref() else {
+                continue;
+            };
+            if crc32.is_empty() {
+                continue;
+            }
+            if let Ok(crc32) = u32::from_str_radix(crc32, 16) {
                 entries.insert(crc32, game_id);
             }
         }
