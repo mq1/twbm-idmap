@@ -19,13 +19,33 @@ fn make_title_map(content: &str) -> BTreeMap<u32, &str> {
 #[cfg(feature = "ascii-titles")]
 fn make_ascii_map<'a>(
     title_map: &'a BTreeMap<u32, &'a str>,
+    en_title_map: &'a BTreeMap<u32, &'a str>,
 ) -> BTreeMap<u32, std::borrow::Cow<'a, str>> {
     let mut entries = BTreeMap::new();
 
-    for (id, title) in title_map {
-        let ascii_title = deunicode::deunicode_with_tofu_cow(*title, "");
-        if !ascii_title.is_empty() && ascii_title != *title {
-            entries.insert(*id, ascii_title);
+    for (id, &en_title) in en_title_map {
+        let &og_title = title_map.get(id).unwrap();
+        if og_title.is_ascii() {
+            // original title is already ascii, don't add an entry
+            // we handle this by falling back to the original title
+            continue;
+        }
+
+        if en_title.is_ascii() {
+            let entry = std::borrow::Cow::Borrowed(en_title);
+            entries.insert(*id, entry);
+        } else {
+            let mut ascii_title = en_title.chars().filter(char::is_ascii).collect::<String>();
+
+            let trimmed = ascii_title.trim();
+            if ascii_title.len() != trimmed.len() {
+                ascii_title = trimmed.to_string();
+            }
+
+            assert!(!ascii_title.is_empty());
+
+            let entry = std::borrow::Cow::Owned(ascii_title);
+            entries.insert(*id, entry);
         }
     }
 
@@ -95,7 +115,11 @@ fn main() {
     let gamehacking_map = parse_gamehacking_ids();
 
     #[cfg(feature = "ascii-titles")]
-    let ascii_map = make_ascii_map(&title_map);
+    let en_titles_txt = fs::read_to_string("assets/wiitdb-en.txt").unwrap();
+    #[cfg(feature = "ascii-titles")]
+    let en_title_map = make_title_map(&en_titles_txt);
+    #[cfg(feature = "ascii-titles")]
+    let ascii_map = make_ascii_map(&title_map, &en_title_map);
 
     let mut bytes = Vec::with_capacity(512 * 1024);
 
@@ -170,7 +194,6 @@ fn main() {
         bytes.extend_from_slice(title_bytes);
     }
 
-    #[allow(unused_mut)]
     let mut meta = format!(
         "const TITLE_COUNT: usize = {}; const TITLES_LEN: usize = {};",
         title_map.len(),
@@ -188,9 +211,6 @@ fn main() {
         "const ASCII_TITLE_COUNT: usize = {};",
         ascii_map.len(),
     ));
-
-    // pad to 4 bytes
-    bytes.resize((bytes.len() + 3) & !3, 0);
 
     meta.push_str(&format!("const DATA_SIZE: usize = {};", bytes.len()));
 

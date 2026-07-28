@@ -1,8 +1,8 @@
 [package]
 name = "twbm-idmap"
-version = "0.4.1"
+version = "0.4.2"
 edition = "2024"
-rust-version = "1.95"
+rust-version = "1.85"
 authors = ["Manuel Quarneti <mq1@ik.me>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/mq1/twbm-idmap"
@@ -14,11 +14,10 @@ include = ["src/**/*", "assets/**/*", "build.rs", "Cargo.toml"]
 default = []
 gamehacking = []
 compress = ["dep:miniz_oxide"]
-ascii-titles = ["dep:deunicode"]
+ascii-titles = []
 
 [dependencies]
 miniz_oxide = { version = "0.9", optional = true, default-features = false }
 
 [build-dependencies]
-deunicode = { version = "1.6", optional = true }
 miniz_oxide = { version = "0.9", optional = true }
