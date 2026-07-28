@@ -18,7 +18,7 @@ fn make_title_map(content: &str) -> BTreeMap<u32, &str> {
 
 #[cfg(feature = "ascii-titles")]
 fn make_ascii_map<'a>(
-    title_map: &'a BTreeMap<u32, &'a str>,
+    title_map: &BTreeMap<u32, &str>,
     en_title_map: &'a BTreeMap<u32, &'a str>,
 ) -> BTreeMap<u32, std::borrow::Cow<'a, str>> {
     let mut entries = BTreeMap::new();
