@@ -27,30 +27,23 @@ struct Aligned4<T: ?Sized>(T);
 static BYTES: Aligned4<[u8; DATA_SIZE]> =
     Aligned4(*include_bytes!(concat!(env!("OUT_DIR"), "/id_map.bin")));
 
-#[cfg(not(feature = "compress"))]
-#[inline]
-fn data() -> &'static ArchivedData {
-    unsafe { rkyv::access_unchecked(&BYTES.0) }
-}
-
 #[cfg(feature = "compress")]
-static BYTES: std::sync::LazyLock<rkyv::util::AlignedVec<u8>> = std::sync::LazyLock::new(|| {
+static BYTES: std::sync::LazyLock<(rkyv::util::AlignedVec<4>,)> = std::sync::LazyLock::new(|| {
     let compressed = include_bytes!(concat!(env!("OUT_DIR"), "/id_map.bin"));
 
-    let mut buf = rkyv::util::AlignedVec::<4>::with_capacity(DATA_SIZE);
+    let mut buf = rkyv::util::AlignedVec::with_capacity(DATA_SIZE);
     unsafe { buf.set_len(DATA_SIZE) };
 
     // inflate directly into the buffer
     let it = std::iter::once(&compressed[..]);
     miniz_oxide::inflate::decompress_slice_iter_to_slice(&mut buf, it, false, true).unwrap();
 
-    buf
+    (buf,)
 });
 
-#[cfg(feature = "compress")]
 #[inline]
 fn data() -> &'static ArchivedData {
-    unsafe { rkyv::access_unchecked(BYTES.as_ref()) }
+    unsafe { rkyv::access_unchecked(&BYTES.0) }
 }
 
 pub fn get_title(game_id: u32) -> Option<&'static str> {
