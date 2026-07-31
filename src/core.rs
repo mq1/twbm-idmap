@@ -1,24 +1,22 @@
 // SPDX-FileCopyrightText: 2026 Manuel Quarneti <mq1@ik.me>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-include!(concat!(env!("OUT_DIR"), "/id_map_meta.rs"));
+use std::collections::BTreeMap;
 
-#[repr(C)]
+include!(concat!(env!("OUT_DIR"), "/id_map.rs"));
+
+#[derive(rkyv::Archive, rkyv::Serialize)]
+#[allow(unused)]
 struct Data {
-    pub title_map_ids: [u32; TITLE_COUNT],
-    pub title_map_title_offsets: [u32; TITLE_COUNT + 1],
+    title_map: BTreeMap<u32, usize>,
 
     #[cfg(feature = "gamehacking")]
-    pub gamehacking_map_ids: [u32; GHID_COUNT],
-    #[cfg(feature = "gamehacking")]
-    pub gamehacking_map_ghids: [u32; GHID_COUNT],
+    gamehacking_map: BTreeMap<u32, usize>,
 
     #[cfg(feature = "ascii-titles")]
-    pub ascii_title_map_ids: [u32; ASCII_TITLE_COUNT],
-    #[cfg(feature = "ascii-titles")]
-    pub ascii_title_map_title_offsets: [u32; ASCII_TITLE_COUNT + 1],
+    ascii_title_map: BTreeMap<u32, usize>,
 
-    pub titles: [u8; TITLES_LEN],
+    all_titles: Vec<String>,
 }
 
 #[cfg(not(feature = "compress"))]
@@ -31,64 +29,54 @@ static BYTES: Aligned4<[u8; DATA_SIZE]> =
 
 #[cfg(not(feature = "compress"))]
 #[inline]
-fn data() -> &'static Data {
-    unsafe { &*BYTES.0.as_ptr().cast() }
+fn data() -> &'static ArchivedData {
+    unsafe { rkyv::access_unchecked(&BYTES.0) }
 }
 
 #[cfg(feature = "compress")]
-static BYTES: std::sync::LazyLock<Box<Data>> = std::sync::LazyLock::new(|| {
+static BYTES: std::sync::LazyLock<rkyv::util::AlignedVec<u8>> = std::sync::LazyLock::new(|| {
     let compressed = include_bytes!(concat!(env!("OUT_DIR"), "/id_map.bin"));
 
-    let mut buf = Box::<Data>::new_uninit();
+    let mut buf = rkyv::util::AlignedVec::<4>::with_capacity(DATA_SIZE);
+    unsafe { buf.set_len(DATA_SIZE) };
 
     // inflate directly into the buffer
-    let ptr = buf.as_mut_ptr().cast::<u8>();
-    let out = unsafe { std::slice::from_raw_parts_mut(ptr, DATA_SIZE) };
     let it = std::iter::once(&compressed[..]);
-    miniz_oxide::inflate::decompress_slice_iter_to_slice(out, it, false, true).unwrap();
+    miniz_oxide::inflate::decompress_slice_iter_to_slice(&mut buf, it, false, true).unwrap();
 
-    unsafe { buf.assume_init() }
+    buf
 });
 
 #[cfg(feature = "compress")]
 #[inline]
-fn data() -> &'static Data {
-    &BYTES
+fn data() -> &'static ArchivedData {
+    unsafe { rkyv::access_unchecked(BYTES.as_ref()) }
 }
 
 pub fn get_title(game_id: u32) -> Option<&'static str> {
     let data = data();
 
-    let idx = data.title_map_ids.binary_search(&game_id).ok()?;
+    let idx = data.title_map.get(&game_id.into())?.to_native() as usize;
+    let title = data.all_titles[idx].as_str();
 
-    unsafe {
-        let start = *data.title_map_title_offsets.get_unchecked(idx) as usize;
-        let end = *data.title_map_title_offsets.get_unchecked(idx + 1) as usize;
-        let slice = data.titles.get_unchecked(start..end);
-        Some(std::str::from_utf8_unchecked(slice))
-    }
+    Some(title)
 }
 
 #[cfg(feature = "gamehacking")]
-pub fn get_ghid(game_id: u32) -> Option<u32> {
+pub fn get_ghid(game_id: u32) -> Option<usize> {
     let data = data();
 
-    let idx = data.gamehacking_map_ids.binary_search(&game_id).ok()?;
+    let idx = data.gamehacking_map.get(&game_id.into())?.to_native() as usize;
 
-    let ghid = unsafe { *data.gamehacking_map_ghids.get_unchecked(idx) };
-    Some(ghid)
+    Some(idx)
 }
 
 #[cfg(feature = "ascii-titles")]
 pub fn get_ascii_title(game_id: u32) -> Option<&'static str> {
     let data = data();
 
-    let idx = data.ascii_title_map_ids.binary_search(&game_id).ok()?;
+    let idx = data.ascii_title_map.get(&game_id.into())?.to_native() as usize;
+    let title = data.all_titles[idx].as_str();
 
-    unsafe {
-        let start = *data.ascii_title_map_title_offsets.get_unchecked(idx) as usize;
-        let end = *data.ascii_title_map_title_offsets.get_unchecked(idx + 1) as usize;
-        let slice = data.titles.get_unchecked(start..end);
-        Some(std::str::from_utf8_unchecked(slice))
-    }
+    Some(title)
 }
