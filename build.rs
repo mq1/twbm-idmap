@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Manuel Quarneti <mq1@ik.me>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-use smol_str::SmolStr;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
@@ -18,7 +17,7 @@ struct Data {
     #[cfg(feature = "ascii-titles")]
     ascii_title_map: BTreeMap<u32, usize>,
 
-    all_titles: Vec<SmolStr>,
+    all_titles: Vec<String>,
 }
 
 fn parse_titles_txt(content: &str) -> BTreeMap<u32, &str> {
@@ -34,7 +33,7 @@ fn parse_titles_txt(content: &str) -> BTreeMap<u32, &str> {
     entries
 }
 
-fn make_title_map(wiitdb: BTreeMap<u32, &str>, all_titles: &Vec<SmolStr>) -> BTreeMap<u32, usize> {
+fn make_title_map(wiitdb: BTreeMap<u32, &str>, all_titles: &Vec<String>) -> BTreeMap<u32, usize> {
     let mut entries = BTreeMap::new();
 
     for (id, title) in wiitdb {
@@ -147,7 +146,7 @@ fn main() {
     }
 
     // a binary searchable vec
-    let all_titles = all_titles.into_iter().map(SmolStr::from).collect();
+    let all_titles = all_titles.into_iter().map(String::from).collect();
 
     let title_map = make_title_map(titles, &all_titles);
 

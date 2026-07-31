@@ -22,8 +22,4 @@ rkyv = { version = "0.8", default-features = false, features = ["std"] }
 
 [build-dependencies]
 miniz_oxide = { version = "0.9", optional = true }
-rkyv = { version = "0.8", default-features = false, features = [
-    "std",
-    "smol_str-0_3",
-] }
-smol_str = "0.3"
+rkyv = { version = "0.8", default-features = false, features = ["std"] }
