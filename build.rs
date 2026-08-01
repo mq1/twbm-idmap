@@ -162,7 +162,7 @@ fn main() {
         for (game_id, title_idx) in title_map {
             write!(&mut out, "({game_id},{title_idx}),").unwrap();
         }
-        out.write_all(b"];\n#[cfg(clippy)]\npub const TITLE_MAP: &[(u32,u32);0] = &[];")
+        out.write_all(b"];\n#[cfg(clippy)]\npub const TITLE_MAP: &[(u32,u32);0] = &[];\n")
             .unwrap();
     }
 
@@ -178,7 +178,7 @@ fn main() {
         for (game_id, ghid) in gamehacking_map {
             write!(&mut out, "({game_id},{ghid}),").unwrap();
         }
-        out.write_all(b"];\n#[cfg(clippy)]\npub const GAMEHACKING_MAP: &[(u32,u32);0] = &[];")
+        out.write_all(b"];\n#[cfg(clippy)]\npub const GAMEHACKING_MAP: &[(u32,u32);0] = &[];\n")
             .unwrap();
     }
 
@@ -194,7 +194,7 @@ fn main() {
         for (game_id, title_idx) in ascii_title_map {
             write!(&mut out, "({game_id},{title_idx}),").unwrap();
         }
-        out.write_all(b"];\n#[cfg(clippy)]\npub const ASCII_TITLE_MAP: &[(u32,u32);0] = &[];")
+        out.write_all(b"];\n#[cfg(clippy)]\npub const ASCII_TITLE_MAP: &[(u32,u32);0] = &[];\n")
             .unwrap();
     }
 
@@ -209,7 +209,7 @@ fn main() {
         for title in all_titles {
             write!(&mut out, "r#\"{title}\"#,").unwrap();
         }
-        out.write_all(b"];\n#[cfg(clippy)]\npub const ALL_TITLES: &[&str;0] = &[];")
+        out.write_all(b"];\n#[cfg(clippy)]\npub const ALL_TITLES: &[&str;0] = &[];\n")
             .unwrap();
     }
 }
