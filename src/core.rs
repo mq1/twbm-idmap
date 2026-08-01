@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 include!(concat!(env!("OUT_DIR"), "/id_map.rs"));
 
-#[derive(rkyv::Archive, rkyv::Serialize)]
+#[derive(rkyv::Archive)]
 #[allow(unused)]
 struct Data {
     title_map: BTreeMap<u32, usize>,
