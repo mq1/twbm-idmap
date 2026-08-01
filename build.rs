@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use std::{
+    borrow::Cow,
     collections::{BTreeMap, BTreeSet},
     fs,
     path::PathBuf,
@@ -20,25 +21,40 @@ struct Data {
     all_titles: Vec<String>,
 }
 
-fn parse_titles_txt(content: &str) -> BTreeMap<u32, &str> {
+fn make_title_list<'a>(title_maps: &[&'a BTreeMap<u32, Cow<'a, str>>]) -> Vec<String> {
+    let mut all_titles = BTreeSet::new();
+
+    for title_map in title_maps {
+        for title in title_map.values() {
+            all_titles.insert(title.clone().into_owned());
+        }
+    }
+
+    all_titles.into_iter().collect()
+}
+
+fn parse_titles_txt(content: &str) -> BTreeMap<u32, Cow<'_, str>> {
     let mut entries = BTreeMap::new();
 
     for line in content.lines().skip(1) {
         let (id, title) = line.split_once(" = ").unwrap();
         let id = u32::from_str_radix(id, 36).unwrap();
 
-        entries.insert(id, title);
+        entries.insert(id, title.into());
     }
 
     entries
 }
 
-fn make_title_map(wiitdb: BTreeMap<u32, &str>, all_titles: &Vec<String>) -> BTreeMap<u32, usize> {
+fn make_title_map(
+    wiitdb: BTreeMap<u32, Cow<'_, str>>,
+    all_titles: &Vec<String>,
+) -> BTreeMap<u32, usize> {
     let mut entries = BTreeMap::new();
 
     for (id, title) in wiitdb {
         let idx = all_titles
-            .binary_search_by(|t| t.as_str().cmp(title))
+            .binary_search_by(|t| t.as_str().cmp(&title))
             .unwrap();
         entries.insert(id, idx);
     }
@@ -48,13 +64,13 @@ fn make_title_map(wiitdb: BTreeMap<u32, &str>, all_titles: &Vec<String>) -> BTre
 
 #[cfg(feature = "ascii-titles")]
 fn make_ascii_map<'a>(
-    title_map: &BTreeMap<usize, &str>,
-    en_title_map: &'a BTreeMap<usize, &'a str>,
-) -> BTreeMap<usize, std::borrow::Cow<'a, str>> {
+    title_map: &BTreeMap<u32, Cow<'a, str>>,
+    en_title_map: &'a BTreeMap<u32, Cow<'a, str>>,
+) -> BTreeMap<u32, Cow<'a, str>> {
     let mut entries = BTreeMap::new();
 
-    for (id, &en_title) in en_title_map {
-        let &og_title = title_map.get(id).unwrap();
+    for (id, en_title) in en_title_map {
+        let og_title = title_map.get(id).unwrap();
         if og_title.is_ascii() {
             // original title is already ascii, don't add an entry
             // we handle this by falling back to the original title
@@ -62,8 +78,7 @@ fn make_ascii_map<'a>(
         }
 
         if en_title.is_ascii() {
-            let entry = std::borrow::Cow::Borrowed(en_title);
-            entries.insert(*id, entry);
+            entries.insert(*id, en_title.clone());
         } else {
             let mut ascii_title = en_title.chars().filter(char::is_ascii).collect::<String>();
 
@@ -74,8 +89,7 @@ fn make_ascii_map<'a>(
 
             assert!(!ascii_title.is_empty());
 
-            let entry = std::borrow::Cow::Owned(ascii_title);
-            entries.insert(*id, entry);
+            entries.insert(*id, ascii_title.into());
         }
     }
 
@@ -128,25 +142,21 @@ fn main() {
 
     let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
 
-    let mut all_titles = BTreeSet::new();
-
     let titles_txt = fs::read_to_string("assets/wiitdb.txt").unwrap();
     let titles = parse_titles_txt(&titles_txt);
-    for title in titles.values() {
-        all_titles.insert(*title);
-    }
 
     #[cfg(feature = "ascii-titles")]
     let en_titles_txt = fs::read_to_string("assets/wiitdb-en.txt").unwrap();
     #[cfg(feature = "ascii-titles")]
     let en_titles = parse_titles_txt(&en_titles_txt);
     #[cfg(feature = "ascii-titles")]
-    for title in en_titles.values() {
-        all_titles.insert(&*title);
-    }
+    let ascii_titles = make_ascii_map(&titles, &en_titles);
 
     // a binary searchable vec
-    let all_titles = all_titles.into_iter().map(String::from).collect();
+    #[cfg(not(feature = "ascii-titles"))]
+    let all_titles = make_title_list(&[&titles]);
+    #[cfg(feature = "ascii-titles")]
+    let all_titles = make_title_list(&[&titles, &ascii_titles]);
 
     let title_map = make_title_map(titles, &all_titles);
 
@@ -154,7 +164,7 @@ fn main() {
     let gamehacking_map = parse_gamehacking_ids();
 
     #[cfg(feature = "ascii-titles")]
-    let ascii_title_map = make_title_map(en_titles, &all_titles);
+    let ascii_title_map = make_title_map(ascii_titles, &all_titles);
 
     let data = Data {
         title_map,
