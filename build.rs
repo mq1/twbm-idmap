@@ -80,7 +80,7 @@ fn make_ascii_map<'a>(
 }
 
 #[cfg(feature = "gamehacking")]
-fn parse_gamehacking_ids() -> BTreeMap<u32, usize> {
+fn parse_gamehacking_ids() -> BTreeMap<u32, u32> {
     const GHID_ANCHOR: &str = "href=\"/game/";
     const GAMEID_ANCHOR: &str = "<td class=\"text-center\">";
 
