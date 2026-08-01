@@ -4,29 +4,17 @@
 use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet},
-    fs,
+    fs::{self, File},
+    io::{BufWriter, Write},
     path::PathBuf,
 };
 
-#[derive(rkyv::Archive, rkyv::Serialize)]
-struct Data {
-    title_map: BTreeMap<u32, usize>,
-
-    #[cfg(feature = "gamehacking")]
-    gamehacking_map: BTreeMap<u32, usize>,
-
-    #[cfg(feature = "ascii-titles")]
-    ascii_title_map: BTreeMap<u32, usize>,
-
-    all_titles: Vec<String>,
-}
-
-fn make_title_list<'a>(title_maps: &[&'a BTreeMap<u32, Cow<'a, str>>]) -> Vec<String> {
+fn make_title_list<'a>(title_maps: &[&'a BTreeMap<u32, Cow<'a, str>>]) -> Vec<&'a str> {
     let mut all_titles = BTreeSet::new();
 
     for title_map in title_maps {
         for title in title_map.values() {
-            all_titles.insert(title.clone().into_owned());
+            all_titles.insert(title.as_ref());
         }
     }
 
@@ -46,17 +34,12 @@ fn parse_titles_txt(content: &str) -> BTreeMap<u32, Cow<'_, str>> {
     entries
 }
 
-fn make_title_map(
-    wiitdb: BTreeMap<u32, Cow<'_, str>>,
-    all_titles: &Vec<String>,
-) -> BTreeMap<u32, usize> {
+fn make_title_map(wiitdb: &BTreeMap<u32, Cow<'_, str>>, all_titles: &[&str]) -> BTreeMap<u32, u32> {
     let mut entries = BTreeMap::new();
 
     for (id, title) in wiitdb {
-        let idx = all_titles
-            .binary_search_by(|t| t.as_str().cmp(&title))
-            .unwrap();
-        entries.insert(id, idx);
+        let idx = all_titles.binary_search_by(|&t| t.cmp(title)).unwrap();
+        entries.insert(*id, idx.try_into().unwrap());
     }
 
     entries
@@ -140,8 +123,6 @@ fn main() {
     println!("cargo::rerun-if-changed=build.rs");
     println!("cargo::rerun-if-changed=assets/**");
 
-    let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
-
     let titles_txt = fs::read_to_string("assets/wiitdb.txt").unwrap();
     let titles = parse_titles_txt(&titles_txt);
 
@@ -158,33 +139,73 @@ fn main() {
     #[cfg(feature = "ascii-titles")]
     let all_titles = make_title_list(&[&titles, &ascii_titles]);
 
-    let title_map = make_title_map(titles, &all_titles);
+    let title_map = make_title_map(&titles, &all_titles);
 
     #[cfg(feature = "gamehacking")]
     let gamehacking_map = parse_gamehacking_ids();
 
     #[cfg(feature = "ascii-titles")]
-    let ascii_title_map = make_title_map(ascii_titles, &all_titles);
+    let ascii_title_map = make_title_map(&ascii_titles, &all_titles);
 
-    let data = Data {
-        title_map,
-        #[cfg(feature = "gamehacking")]
-        gamehacking_map,
-        #[cfg(feature = "ascii-titles")]
-        ascii_title_map,
-        all_titles,
-    };
+    let out_path = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("id_map.rs");
+    let out_file = File::create(&out_path).unwrap();
+    let mut out = BufWriter::new(out_file);
 
-    let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&data).unwrap();
+    // title map
+    {
+        write!(
+            &mut out,
+            "pub const TITLE_MAP: &[(u32,u32);{}] = &[",
+            title_map.len()
+        )
+        .unwrap();
+        for (game_id, title_idx) in title_map {
+            write!(&mut out, "({game_id},{title_idx}),").unwrap();
+        }
+        out.write_all(b"];").unwrap();
+    }
 
-    let meta = format!("const DATA_SIZE: usize = {};", bytes.len());
+    // gamehacking map
+    #[cfg(feature = "gamehacking")]
+    {
+        write!(
+            &mut out,
+            "pub const GAMEHACKING_MAP: &[(u32,u32);{}] = &[",
+            gamehacking_map.len()
+        )
+        .unwrap();
+        for (game_id, ghid) in gamehacking_map {
+            write!(&mut out, "({game_id},{ghid}),").unwrap();
+        }
+        out.write_all(b"];").unwrap();
+    }
 
-    #[cfg(feature = "compress")]
-    let bytes = miniz_oxide::deflate::compress_to_vec(&bytes, 9);
+    // ascii title map
+    #[cfg(feature = "ascii-titles")]
+    {
+        write!(
+            &mut out,
+            "pub const ASCII_TITLE_MAP: &[(u32,u32);{}] = &[",
+            ascii_title_map.len()
+        )
+        .unwrap();
+        for (game_id, title_idx) in ascii_title_map {
+            write!(&mut out, "({game_id},{title_idx}),").unwrap();
+        }
+        out.write_all(b"];").unwrap();
+    }
 
-    let out_path = out_dir.join("id_map.bin");
-    fs::write(out_path, &bytes).unwrap();
-
-    let meta_out_path = out_dir.join("id_map.rs");
-    fs::write(meta_out_path, meta).unwrap();
+    // all titles
+    {
+        write!(
+            &mut out,
+            "pub const ALL_TITLES: &[&str;{}] = &[",
+            all_titles.len()
+        )
+        .unwrap();
+        for title in all_titles {
+            write!(&mut out, "r#\"{title}\"#,").unwrap();
+        }
+        out.write_all(b"];").unwrap();
+    }
 }

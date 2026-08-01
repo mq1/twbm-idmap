@@ -22,9 +22,6 @@ jobs:
       - name: test (no features)
         run: cargo run -- RMCE01
 
-      - name: test (compression)
-        run: cargo run --features compress -- RMCE01
-
       - name: test (gamehacking)
         run: cargo run --features gamehacking -- RMCE01
 
@@ -32,4 +29,4 @@ jobs:
         run: cargo run --features ascii-titles -- STGJAF
 
       - name: test (all features)
-        run: cargo run --features compress,gamehacking,ascii-titles -- STGJAF
+        run: cargo run --features gamehacking,ascii-titles -- STGJAF
