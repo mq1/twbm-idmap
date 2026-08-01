@@ -7,7 +7,7 @@ authors = ["Manuel Quarneti <mq1@ik.me>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/mq1/twbm-idmap"
 homepage = "https://github.com/mq1/twbm-idmap"
-description = "Get Wii/NGC game titles and gamehacking ids completely offline"
+description = "Get Wii/NGC game titles and gamehacking ids fully offline"
 include = ["src/**/*", "assets/**/*", "build.rs", "Cargo.toml"]
 
 [features]

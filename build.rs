@@ -167,13 +167,14 @@ fn main() {
 
     let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&data).unwrap();
 
+    let meta = format!("const DATA_SIZE: usize = {};", bytes.len());
+
     #[cfg(feature = "compress")]
     let bytes = miniz_oxide::deflate::compress_to_vec(&bytes, 9);
 
     let out_path = out_dir.join("id_map.bin");
     fs::write(out_path, &bytes).unwrap();
 
-    let meta = format!("const DATA_SIZE: usize = {};", bytes.len());
     let meta_out_path = out_dir.join("id_map.rs");
     fs::write(meta_out_path, meta).unwrap();
 }
