@@ -3,43 +3,19 @@
 
 use std::{
     borrow::Cow,
-    collections::{BTreeMap, BTreeSet},
     fs::{self, File},
     io::{BufWriter, Write},
     path::PathBuf,
 };
 
-fn make_title_list<'a>(title_maps: &[&'a BTreeMap<u32, Cow<'a, str>>]) -> Vec<&'a str> {
-    let mut all_titles = BTreeSet::new();
-
-    for title_map in title_maps {
-        for title in title_map.values() {
-            all_titles.insert(title.as_ref());
-        }
-    }
-
-    all_titles.into_iter().collect()
-}
-
-fn parse_titles_txt(content: &str) -> BTreeMap<u32, Cow<'_, str>> {
-    let mut entries = BTreeMap::new();
+fn parse_titles_txt(content: &str) -> Vec<(u32, &str)> {
+    let mut entries = Vec::with_capacity(16_384);
 
     for line in content.lines().skip(1) {
         let (id, title) = line.split_once(" = ").unwrap();
         let id = u32::from_str_radix(id, 36).unwrap();
 
-        entries.insert(id, title.into());
-    }
-
-    entries
-}
-
-fn make_title_map(wiitdb: &BTreeMap<u32, Cow<'_, str>>, all_titles: &[&str]) -> BTreeMap<u32, u32> {
-    let mut entries = BTreeMap::new();
-
-    for (id, title) in wiitdb {
-        let idx = all_titles.binary_search_by(|&t| t.cmp(title)).unwrap();
-        entries.insert(*id, idx.try_into().unwrap());
+        entries.push((id, title));
     }
 
     entries
@@ -47,32 +23,35 @@ fn make_title_map(wiitdb: &BTreeMap<u32, Cow<'_, str>>, all_titles: &[&str]) -> 
 
 #[cfg(feature = "ascii-titles")]
 fn make_ascii_map<'a>(
-    title_map: &BTreeMap<u32, Cow<'a, str>>,
-    en_title_map: &'a BTreeMap<u32, Cow<'a, str>>,
-) -> BTreeMap<u32, Cow<'a, str>> {
-    let mut entries = BTreeMap::new();
+    title_map: &[(u32, &str)],
+    en_title_map: &[(u32, &'a str)],
+) -> Vec<(u32, Cow<'a, str>)> {
+    let mut entries = Vec::with_capacity(4096);
 
-    for (id, en_title) in en_title_map {
-        let og_title = title_map.get(id).unwrap();
-        if og_title.is_ascii() {
+    for ((id, title), (en_id, en_title)) in
+        title_map.iter().copied().zip(en_title_map.iter().copied())
+    {
+        assert_eq!(id, en_id);
+
+        if title.is_ascii() {
             // original title is already ascii, don't add an entry
             // we handle this by falling back to the original title
             continue;
         }
 
         if en_title.is_ascii() {
-            entries.insert(*id, en_title.clone());
+            entries.push((en_id, en_title.into()));
         } else {
-            let mut ascii_title = en_title.chars().filter(char::is_ascii).collect::<String>();
+            let mut ascii_title = en_title
+                .chars()
+                .filter(char::is_ascii)
+                .skip_while(char::is_ascii_whitespace)
+                .collect::<String>();
 
-            let trimmed = ascii_title.trim();
-            if ascii_title.len() != trimmed.len() {
-                ascii_title = trimmed.to_string();
-            }
+            ascii_title.truncate(ascii_title.trim_end().len());
 
             assert!(!ascii_title.is_empty());
-
-            entries.insert(*id, ascii_title.into());
+            entries.push((en_id, ascii_title.into()));
         }
     }
 
@@ -80,11 +59,11 @@ fn make_ascii_map<'a>(
 }
 
 #[cfg(feature = "gamehacking")]
-fn parse_gamehacking_ids() -> BTreeMap<u32, u32> {
+fn parse_gamehacking_ids() -> Vec<(u32, u32)> {
     const GHID_ANCHOR: &str = "href=\"/game/";
     const GAMEID_ANCHOR: &str = "<td class=\"text-center\">";
 
-    let mut entries = BTreeMap::new();
+    let mut entries = Vec::with_capacity(2048);
 
     for i in 0..=70 {
         let filename = format!("assets/gamehacking/GameHacking.org - WII - Page {i}.html");
@@ -112,9 +91,12 @@ fn parse_gamehacking_ids() -> BTreeMap<u32, u32> {
 
             let gameid = u32::from_str_radix(gameid_str, 36).unwrap();
 
-            entries.insert(gameid, ghid);
+            entries.push((gameid, ghid));
         }
     }
+
+    entries.sort_unstable_by_key(|(id, _)| *id);
+    entries.dedup_by_key(|(id, _)| *id);
 
     entries
 }
@@ -124,28 +106,25 @@ fn main() {
     println!("cargo::rerun-if-changed=assets/**");
 
     let titles_txt = fs::read_to_string("assets/wiitdb.txt").unwrap();
-    let titles = parse_titles_txt(&titles_txt);
+    let mut titles = parse_titles_txt(&titles_txt);
 
     #[cfg(feature = "ascii-titles")]
     let en_titles_txt = fs::read_to_string("assets/wiitdb-en.txt").unwrap();
     #[cfg(feature = "ascii-titles")]
     let en_titles = parse_titles_txt(&en_titles_txt);
     #[cfg(feature = "ascii-titles")]
-    let ascii_titles = make_ascii_map(&titles, &en_titles);
+    let mut ascii_titles = make_ascii_map(&titles, &en_titles);
 
-    // a binary searchable vec
-    #[cfg(not(feature = "ascii-titles"))]
-    let all_titles = make_title_list(&[&titles]);
+    titles.sort_unstable_by_key(|(id, _)| *id);
+    titles.dedup_by_key(|(id, _)| *id);
+
     #[cfg(feature = "ascii-titles")]
-    let all_titles = make_title_list(&[&titles, &ascii_titles]);
-
-    let title_map = make_title_map(&titles, &all_titles);
+    ascii_titles.sort_unstable_by_key(|(id, _)| *id);
+    #[cfg(feature = "ascii-titles")]
+    ascii_titles.dedup_by_key(|(id, _)| *id);
 
     #[cfg(feature = "gamehacking")]
     let gamehacking_map = parse_gamehacking_ids();
-
-    #[cfg(feature = "ascii-titles")]
-    let ascii_title_map = make_title_map(&ascii_titles, &all_titles);
 
     let out_path = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("id_map.rs");
     let out_file = File::create(&out_path).unwrap();
@@ -155,14 +134,16 @@ fn main() {
     {
         write!(
             &mut out,
-            "#[cfg(not(clippy))]\npub const TITLE_MAP: &[(u32,u32);{}] = &[",
-            title_map.len()
+            "#[cfg(not(clippy))]\npub const TITLE_MAP: &[(u32,&str);{}] = &[",
+            titles.len()
         )
         .unwrap();
-        for (game_id, title_idx) in title_map {
-            write!(&mut out, "({game_id},{title_idx}),").unwrap();
+
+        for (game_id, game_title) in &titles {
+            write!(&mut out, "({game_id},r#\"{game_title}\"#),").unwrap();
         }
-        out.write_all(b"];\n#[cfg(clippy)]\npub const TITLE_MAP: &[(u32,u32);0] = &[];\n")
+
+        out.write_all(b"];\n#[cfg(clippy)]\npub const TITLE_MAP: &[(u32,&str);0] = &[];\n")
             .unwrap();
     }
 
@@ -175,9 +156,11 @@ fn main() {
             gamehacking_map.len()
         )
         .unwrap();
+
         for (game_id, ghid) in gamehacking_map {
             write!(&mut out, "({game_id},{ghid}),").unwrap();
         }
+
         out.write_all(b"];\n#[cfg(clippy)]\npub const GAMEHACKING_MAP: &[(u32,u32);0] = &[];\n")
             .unwrap();
     }
@@ -187,29 +170,16 @@ fn main() {
     {
         write!(
             &mut out,
-            "#[cfg(not(clippy))]\npub const ASCII_TITLE_MAP: &[(u32,u32);{}] = &[",
-            ascii_title_map.len()
+            "#[cfg(not(clippy))]\npub const ASCII_TITLE_MAP: &[(u32,&str);{}] = &[",
+            ascii_titles.len()
         )
         .unwrap();
-        for (game_id, title_idx) in ascii_title_map {
-            write!(&mut out, "({game_id},{title_idx}),").unwrap();
-        }
-        out.write_all(b"];\n#[cfg(clippy)]\npub const ASCII_TITLE_MAP: &[(u32,u32);0] = &[];\n")
-            .unwrap();
-    }
 
-    // all titles
-    {
-        write!(
-            &mut out,
-            "#[cfg(not(clippy))]\npub const ALL_TITLES: &[&str;{}] = &[",
-            all_titles.len()
-        )
-        .unwrap();
-        for title in all_titles {
-            write!(&mut out, "r#\"{title}\"#,").unwrap();
+        for (game_id, game_title) in ascii_titles {
+            write!(&mut out, "({game_id},r#\"{game_title}\"#),").unwrap();
         }
-        out.write_all(b"];\n#[cfg(clippy)]\npub const ALL_TITLES: &[&str;0] = &[];\n")
+
+        out.write_all(b"];\n#[cfg(clippy)]\npub const ASCII_TITLE_MAP: &[(u32,&str);0] = &[];\n")
             .unwrap();
     }
 }
