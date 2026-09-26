@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use std::{
-    borrow::Cow,
     fs::{self, File},
     io::{BufWriter, Write},
     path::PathBuf,
@@ -25,7 +24,7 @@ fn parse_titles_txt(content: &str) -> Vec<(u32, &str)> {
 fn make_ascii_map<'a>(
     title_map: &[(u32, &str)],
     en_title_map: &[(u32, &'a str)],
-) -> Vec<(u32, Cow<'a, str>)> {
+) -> Vec<(u32, std::borrow::Cow<'a, str>)> {
     let mut entries = Vec::with_capacity(4096);
 
     for ((id, title), (en_id, en_title)) in
