@@ -132,7 +132,11 @@ fn main() {
 
     let data = Data {
         title_map,
+
+        #[cfg(feature = "ascii-titles")]
         ascii_title_map,
+
+        #[cfg(feature = "gamehacking")]
         gamehacking_map,
     };
 
