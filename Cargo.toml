@@ -18,6 +18,7 @@ compress = ["dep:miniz_oxide"]
 
 [dependencies]
 rkyv = { version = "0.8", default-features = false, features = ["std"] }
+miniz_oxide = { version = "0.9", optional = true, default-features = false }
 
 [build-dependencies]
 rkyv = { version = "0.8", default-features = false, features = ["std"] }

@@ -3,7 +3,37 @@
 
 use rkyv::Archive;
 
-const BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/id_map.bin"));
+#[cfg(feature = "compress")]
+use rkyv::util::AlignedVec;
+#[cfg(feature = "compress")]
+use std::sync::LazyLock;
+
+include!(concat!(env!("OUT_DIR"), "/id_map_meta.rs"));
+
+#[cfg(not(feature = "compress"))]
+#[repr(C, align(4))]
+struct Align4<T: ?Sized>(T);
+
+#[cfg(not(feature = "compress"))]
+static BYTES: Align4<[u8; DATA_LEN]> =
+    Align4(*include_bytes!(concat!(env!("OUT_DIR"), "/id_map.bin")));
+
+#[cfg(feature = "compress")]
+static BYTES: LazyLock<(AlignedVec<4>,)> = LazyLock::new(|| {
+    let compressed = include_bytes!(concat!(env!("OUT_DIR"), "/id_map.bin"));
+
+    let mut buf = AlignedVec::with_capacity(DATA_LEN);
+
+    miniz_oxide::inflate::decompress_slice_iter_to_slice(
+        &mut buf,
+        std::iter::once(&compressed[..]),
+        false,
+        true,
+    )
+    .unwrap();
+
+    (buf,)
+});
 
 #[allow(dead_code)]
 #[derive(Archive)]
@@ -20,7 +50,7 @@ struct Data {
 #[must_use]
 #[inline]
 fn data() -> &'static ArchivedData {
-    unsafe { rkyv::access_unchecked(&BYTES[..]) }
+    unsafe { rkyv::access_unchecked(&BYTES.0[..]) }
 }
 
 pub fn get_title(game_id: u32) -> Option<&'static str> {
