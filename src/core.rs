@@ -23,6 +23,7 @@ static BYTES: LazyLock<(AlignedVec<4>,)> = LazyLock::new(|| {
     let compressed = include_bytes!(concat!(env!("OUT_DIR"), "/id_map.bin"));
 
     let mut buf = AlignedVec::with_capacity(DATA_LEN);
+    unsafe { buf.set_len(DATA_LEN) };
 
     miniz_oxide::inflate::decompress_slice_iter_to_slice(
         &mut buf,

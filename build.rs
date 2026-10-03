@@ -142,9 +142,12 @@ fn main() {
 
     let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&data).unwrap();
 
-    let meta = format!("const DATA_LEN: usize = {};", bytes.len());
-    let meta_path = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("id_map_meta.rs");
-    fs::write(&meta_path, meta).unwrap();
+    // metadata
+    {
+        let meta = format!("const DATA_LEN: usize = {};", bytes.len());
+        let meta_path = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("id_map_meta.rs");
+        fs::write(&meta_path, meta).unwrap();
+    }
 
     #[cfg(feature = "compress")]
     let bytes = miniz_oxide::deflate::compress_to_vec(&bytes, 9);
