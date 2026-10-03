@@ -11,7 +11,7 @@ description = "Get Wii/NGC game titles and gamehacking ids. offline and minimal 
 include = ["src/**/*", "assets/**/*", "build.rs", "Cargo.toml"]
 
 [features]
-default = ["gamehacking", "ascii-titles", "compress"]
+default = []
 gamehacking = []
 ascii-titles = []
 compress = ["dep:miniz_oxide"]
