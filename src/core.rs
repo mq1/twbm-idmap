@@ -1,11 +1,12 @@
 // SPDX-FileCopyrightText: 2026 Manuel Quarneti <mq1@ik.me>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-use rkyv::{Archive, Deserialize};
+use rkyv::Archive;
 
 const BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/id_map.bin"));
 
-#[derive(Archive, Deserialize)]
+#[allow(dead_code)]
+#[derive(Archive)]
 struct Data {
     title_map: Vec<(u32, String)>,
 
