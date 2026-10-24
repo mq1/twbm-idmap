@@ -19,7 +19,7 @@ struct Data<'a> {
 
 impl<'a> Data<'a> {
     fn write(&self, writer: &mut dyn Write, meta_writer: &mut dyn Write) -> usize {
-        meta_writer.write_all(b"struct Data {").unwrap();
+        meta_writer.write_all(b"#[repr(C)]\nstruct Data {").unwrap();
 
         let mut all_titles = String::new();
 
