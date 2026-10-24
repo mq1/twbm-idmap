@@ -1,8 +1,8 @@
 [package]
 name = "twbm-idmap"
-version = "0.5.3"
+version = "0.7.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.92"
 authors = ["Manuel Quarneti <mq1@ik.me>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/mq1/twbm-idmap"
@@ -11,9 +11,21 @@ description = "Get Wii/NGC game titles and gamehacking ids. offline and no depen
 include = ["src/**/*", "assets/**/*", "build.rs", "Cargo.toml"]
 
 [package.metadata.docs.rs]
-all-features = true
+features = ["gamehacking", "ascii-titles"]
+rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 default = []
 gamehacking = []
 ascii-titles = []
+_compress = []
+compress-deflate = ["_compress", "dep:miniz_oxide"]
+compress-zstd = ["_compress", "dep:zstd-sys"]
+
+[dependencies]
+miniz_oxide = { version = "0.9", default-features = false, optional = true }
+zstd-sys = { version = "2.0", default-features = false, optional = true }
+
+[build-dependencies]
+miniz_oxide = { version = "0.9", optional = true }
+zstd-sys = { version = "2.0", default-features = false, optional = true }

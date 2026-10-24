@@ -17,7 +17,7 @@ jobs:
           fetch-depth: 1
 
       - name: Install rust toolchain
-        uses: dtolnay/rust-toolchain@1.85
+        uses: dtolnay/rust-toolchain@1.92
 
       - name: test (no features)
         run: cargo run -- RMCE01
@@ -28,5 +28,8 @@ jobs:
       - name: test (ascii-titles)
         run: cargo run --features ascii-titles -- STGJAF
 
-      - name: test (all features)
-        run: cargo run --features gamehacking,ascii-titles -- STGJAF
+      - name: test (compress-deflate)
+        run: cargo run --features gamehacking,ascii-titles,compress-deflate -- STGJAF
+
+      - name: test (compress-zstd)
+        run: cargo run --features gamehacking,ascii-titles,compress-zstd -- STGJAF
