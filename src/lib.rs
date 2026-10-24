@@ -13,7 +13,7 @@ pub fn get_title(game_id: impl AsRef<str>) -> Option<&'static str> {
 
 #[cfg_attr(docsrs, doc(cfg(feature = "gamehacking")))]
 #[cfg(feature = "gamehacking")]
-pub fn get_ghid(game_id: impl AsRef<str>) -> Option<usize> {
+pub fn get_ghid(game_id: impl AsRef<str>) -> Option<u32> {
     let game_id = u32::from_str_radix(game_id.as_ref(), 36).ok()?;
     core::get_ghid(game_id)
 }

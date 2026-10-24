@@ -62,11 +62,11 @@ pub fn get_title(game_id: u32) -> Option<&'static str> {
 }
 
 #[cfg(feature = "gamehacking")]
-pub fn get_ghid(game_id: u32) -> Option<usize> {
+pub fn get_ghid(game_id: u32) -> Option<u32> {
     let data = data();
 
     let idx = data.gamehacking_map_ids.binary_search(&game_id).ok()?;
-    let ghid = unsafe { *data.gamehacking_map_ghids.get_unchecked(idx) } as usize;
+    let ghid = unsafe { *data.gamehacking_map_ghids.get_unchecked(idx) };
 
     Some(ghid)
 }
