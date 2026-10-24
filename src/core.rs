@@ -3,58 +3,50 @@
 
 include!(concat!(env!("OUT_DIR"), "/id_map_meta.rs"));
 
-#[repr(C, align(4))]
-struct Align4<const N: usize>([u8; N]);
-
 #[cfg(not(feature = "_compress"))]
-static BYTES: Align4<DATA_SIZE> = Align4(*include_bytes!(concat!(env!("OUT_DIR"), "/id_map.bin")));
+static DATA: Data =
+    unsafe { std::mem::transmute(*include_bytes!(concat!(env!("OUT_DIR"), "/id_map.bin"))) };
 
 #[cfg(feature = "_compress")]
-static BYTES: std::sync::LazyLock<Box<Align4<DATA_SIZE>>> = std::sync::LazyLock::new(|| {
+static DATA: std::sync::LazyLock<Box<Data>> = std::sync::LazyLock::new(|| {
     const COMPRESSED: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/id_map.bin"));
 
-    let mut buf = unsafe { Box::<Align4<DATA_SIZE>>::new_zeroed().assume_init() };
+    let mut buf = Box::<Data>::new_zeroed();
 
-    #[cfg(feature = "compress-deflate")]
-    miniz_oxide::inflate::decompress_slice_iter_to_slice(
-        &mut buf.0[..],
-        std::iter::once(COMPRESSED),
-        false,
-        true,
-    )
-    .unwrap();
+    {
+        let data = buf.as_mut_ptr().cast();
+        let len = std::mem::size_of::<Data>();
 
-    #[cfg(feature = "compress-zstd")]
-    unsafe {
-        let written = zstd_sys::ZSTD_decompress(
-            buf.0.as_mut_ptr().cast(),
-            DATA_SIZE,
-            COMPRESSED.as_ptr().cast(),
-            COMPRESSED.len(),
-        );
+        #[cfg(feature = "compress-deflate")]
+        miniz_oxide::inflate::decompress_slice_iter_to_slice(
+            unsafe { std::slice::from_raw_parts_mut(data, len) },
+            std::iter::once(COMPRESSED),
+            false,
+            true,
+        )
+        .unwrap();
 
-        debug_assert_eq!(zstd_sys::ZSTD_isError(written), 0);
-        debug_assert_eq!(written, DATA_SIZE);
+        #[cfg(feature = "compress-zstd")]
+        unsafe {
+            let written =
+                zstd_sys::ZSTD_decompress(data, len, COMPRESSED.as_ptr().cast(), COMPRESSED.len());
+
+            debug_assert_eq!(zstd_sys::ZSTD_isError(written), 0);
+            debug_assert_eq!(written, len);
+        }
     }
 
-    buf
+    unsafe { buf.assume_init() }
 });
 
-#[inline]
-fn data() -> &'static Data {
-    unsafe { BYTES.0.as_ptr().cast::<Data>().as_ref_unchecked() }
-}
-
 pub fn get_title(game_id: u32) -> Option<&'static str> {
-    let data = data();
-
-    let idx = data.title_map_ids.binary_search(&game_id).ok()?;
+    let idx = DATA.title_map_ids.binary_search(&game_id).ok()?;
 
     let title_str = unsafe {
-        let start = *data.title_map_offsets.get_unchecked(idx) as usize;
-        let end = *data.title_map_offsets.get_unchecked(idx.unchecked_add(1)) as usize;
+        let start = *DATA.title_map_offsets.get_unchecked(idx) as usize;
+        let end = *DATA.title_map_offsets.get_unchecked(idx.unchecked_add(1)) as usize;
 
-        let title_slice = data.all_titles.get_unchecked(start..end);
+        let title_slice = DATA.all_titles.get_unchecked(start..end);
         str::from_utf8_unchecked(title_slice)
     };
 
@@ -63,27 +55,23 @@ pub fn get_title(game_id: u32) -> Option<&'static str> {
 
 #[cfg(feature = "gamehacking")]
 pub fn get_ghid(game_id: u32) -> Option<u32> {
-    let data = data();
-
-    let idx = data.gamehacking_map_ids.binary_search(&game_id).ok()?;
-    let ghid = unsafe { *data.gamehacking_map_ghids.get_unchecked(idx) };
+    let idx = DATA.gamehacking_map_ids.binary_search(&game_id).ok()?;
+    let ghid = unsafe { *DATA.gamehacking_map_ghids.get_unchecked(idx) };
 
     Some(ghid)
 }
 
 #[cfg(feature = "ascii-titles")]
 pub fn get_ascii_title(game_id: u32) -> Option<&'static str> {
-    let data = data();
-
-    let idx = data.ascii_title_map_ids.binary_search(&game_id).ok()?;
+    let idx = DATA.ascii_title_map_ids.binary_search(&game_id).ok()?;
 
     let title_str = unsafe {
-        let start = *data.ascii_title_map_offsets.get_unchecked(idx) as usize;
-        let end = *data
+        let start = *DATA.ascii_title_map_offsets.get_unchecked(idx) as usize;
+        let end = *DATA
             .ascii_title_map_offsets
             .get_unchecked(idx.unchecked_add(1)) as usize;
 
-        let title_slice = data.all_titles.get_unchecked(start..end);
+        let title_slice = DATA.all_titles.get_unchecked(start..end);
         str::from_utf8_unchecked(title_slice)
     };
 

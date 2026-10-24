@@ -18,7 +18,7 @@ struct Data<'a> {
 }
 
 impl<'a> Data<'a> {
-    fn write(&self, writer: &mut dyn Write, meta_writer: &mut dyn Write) -> usize {
+    fn write(&self, writer: &mut dyn Write, meta_writer: &mut dyn Write) {
         let endianness = std::env::var("CARGO_CFG_TARGET_ENDIAN").unwrap();
         let encode_u32 = move |value: u32| match endianness.as_str() {
             "little" => value.to_le_bytes(),
@@ -49,8 +49,6 @@ impl<'a> Data<'a> {
         )
         .unwrap();
 
-        let mut written = 4 * self.titles.len() + 4 * (self.titles.len() + 1);
-
         #[cfg(feature = "ascii-titles")]
         {
             for (id, _) in &self.ascii_titles {
@@ -76,8 +74,6 @@ impl<'a> Data<'a> {
                 self.ascii_titles.len() + 1
             )
             .unwrap();
-
-            written += 4 * self.ascii_titles.len() + 4 * (self.ascii_titles.len() + 1);
         }
 
         #[cfg(feature = "gamehacking")]
@@ -101,15 +97,15 @@ impl<'a> Data<'a> {
                 self.gamehacking_map.len()
             )
             .unwrap();
+        }
 
-            written += 8 * self.gamehacking_map.len();
+        // pad the titles to 4 bytes
+        while all_titles.len() % 4 != 0 {
+            all_titles.push('\0');
         }
 
         writer.write_all(all_titles.as_bytes()).unwrap();
-        written += all_titles.len();
         write!(meta_writer, "all_titles: [u8; {}]}}", all_titles.len()).unwrap();
-
-        written
     }
 }
 
@@ -251,24 +247,18 @@ fn main() {
     let mut meta_out_writer = BufWriter::new(meta_out_file);
 
     #[cfg(feature = "compress-deflate")]
-    let data_size = {
+    {
         let mut uncompressed = Vec::new();
-        let written = data.write(&mut uncompressed, &mut meta_out_writer);
-        let padded = written.next_multiple_of(4);
-        uncompressed.resize(padded, 0);
+        data.write(&mut uncompressed, &mut meta_out_writer);
 
         let compressed = miniz_oxide::deflate::compress_to_vec(&uncompressed, 9);
         out_writer.write_all(&compressed).unwrap();
-
-        padded
-    };
+    }
 
     #[cfg(feature = "compress-zstd")]
-    let data_size = unsafe {
+    unsafe {
         let mut uncompressed = Vec::new();
-        let written = data.write(&mut uncompressed, &mut meta_out_writer);
-        let padded = written.next_multiple_of(4);
-        uncompressed.resize(padded, 0);
+        data.write(&mut uncompressed, &mut meta_out_writer);
 
         let capacity = zstd_sys::ZSTD_compressBound(uncompressed.len());
         let mut dst: Vec<u8> = Vec::with_capacity(capacity);
@@ -285,26 +275,10 @@ fn main() {
 
         dst.set_len(written);
         out_writer.write_all(&dst).unwrap();
-
-        padded
-    };
+    }
 
     #[cfg(not(feature = "_compress"))]
-    let data_size = {
-        let written = data.write(&mut out_writer, &mut meta_out_writer);
-        let padded = written.next_multiple_of(4);
-        let padding = padded - written;
-
-        out_writer.write_all(&[0u8; 4][..padding]).unwrap();
-
-        padded
-    };
-
-    write!(
-        &mut meta_out_writer,
-        "const DATA_SIZE: usize = {data_size};"
-    )
-    .unwrap();
+    data.write(&mut out_writer, &mut meta_out_writer);
 
     out_writer.flush().unwrap();
     meta_out_writer.flush().unwrap();
