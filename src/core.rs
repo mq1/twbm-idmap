@@ -47,7 +47,7 @@ pub fn get_title(game_id: u32) -> Option<&'static str> {
         let end = *DATA.title_map_offsets.get_unchecked(idx.unchecked_add(1)) as usize;
 
         let title_slice = DATA.all_titles.get_unchecked(start..end);
-        str::from_utf8_unchecked(title_slice)
+        std::str::from_utf8_unchecked(title_slice)
     };
 
     Some(title_str)
@@ -72,7 +72,7 @@ pub fn get_ascii_title(game_id: u32) -> Option<&'static str> {
             .get_unchecked(idx.unchecked_add(1)) as usize;
 
         let title_slice = DATA.all_titles.get_unchecked(start..end);
-        str::from_utf8_unchecked(title_slice)
+        std::str::from_utf8_unchecked(title_slice)
     };
 
     Some(title_str)
