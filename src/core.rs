@@ -9,12 +9,13 @@ struct Align4<const N: usize>([u8; N]);
 #[cfg(not(feature = "_compress"))]
 static BYTES: Align4<DATA_SIZE> = Align4(*include_bytes!(concat!(env!("OUT_DIR"), "/id_map.bin")));
 
-#[cfg(feature = "compress-deflate")]
+#[cfg(feature = "_compress")]
 static BYTES: std::sync::LazyLock<Box<Align4<DATA_SIZE>>> = std::sync::LazyLock::new(|| {
     const COMPRESSED: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/id_map.bin"));
 
     let mut buf = unsafe { Box::<Align4<DATA_SIZE>>::new_zeroed().assume_init() };
 
+    #[cfg(feature = "compress-deflate")]
     miniz_oxide::inflate::decompress_slice_iter_to_slice(
         &mut buf.0[..],
         std::iter::once(COMPRESSED),
@@ -23,15 +24,7 @@ static BYTES: std::sync::LazyLock<Box<Align4<DATA_SIZE>>> = std::sync::LazyLock:
     )
     .unwrap();
 
-    buf
-});
-
-#[cfg(feature = "compress-zstd")]
-static BYTES: std::sync::LazyLock<Box<Align4<DATA_SIZE>>> = std::sync::LazyLock::new(|| {
-    const COMPRESSED: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/id_map.bin"));
-
-    let mut buf = unsafe { Box::<Align4<DATA_SIZE>>::new_zeroed().assume_init() };
-
+    #[cfg(feature = "compress-zstd")]
     unsafe {
         let written = zstd_sys::ZSTD_decompress(
             buf.0.as_mut_ptr().cast(),
