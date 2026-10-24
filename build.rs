@@ -7,6 +7,105 @@ use std::{
     path::PathBuf,
 };
 
+struct Data<'a> {
+    titles: Vec<(u32, &'a str)>,
+
+    #[cfg(feature = "ascii-titles")]
+    ascii_titles: Vec<(u32, std::borrow::Cow<'a, str>)>,
+
+    #[cfg(feature = "gamehacking")]
+    gamehacking_map: Vec<(u32, u32)>,
+}
+
+impl<'a> Data<'a> {
+    fn write(&self, writer: &mut dyn Write, meta_writer: &mut dyn Write) -> usize {
+        meta_writer.write_all(b"struct Data {").unwrap();
+
+        let mut all_titles = String::new();
+
+        for (id, _) in &self.titles {
+            writer.write_all(&id.to_le_bytes()).unwrap();
+        }
+        write!(meta_writer, "title_map_ids: [u32; {}],", self.titles.len()).unwrap();
+
+        for (_, title) in &self.titles {
+            let pos = u32::try_from(all_titles.len()).unwrap();
+            writer.write_all(&pos.to_le_bytes()).unwrap();
+            all_titles.push_str(title);
+        }
+        let pos = u32::try_from(all_titles.len()).unwrap();
+        writer.write_all(&pos.to_le_bytes()).unwrap();
+        write!(
+            meta_writer,
+            "title_map_offsets: [u32; {}],",
+            self.titles.len() + 1
+        )
+        .unwrap();
+
+        let mut written = 4 * self.titles.len() + 4 * (self.titles.len() + 1);
+
+        #[cfg(feature = "ascii-titles")]
+        {
+            for (id, _) in &self.ascii_titles {
+                writer.write_all(&id.to_le_bytes()).unwrap();
+            }
+            write!(
+                meta_writer,
+                "ascii_title_map_ids: [u32; {}],",
+                self.ascii_titles.len()
+            )
+            .unwrap();
+
+            for (_, title) in &self.ascii_titles {
+                let pos = u32::try_from(all_titles.len()).unwrap();
+                writer.write_all(&pos.to_le_bytes()).unwrap();
+                all_titles.push_str(title);
+            }
+            let pos = u32::try_from(all_titles.len()).unwrap();
+            writer.write_all(&pos.to_le_bytes()).unwrap();
+            write!(
+                meta_writer,
+                "ascii_title_map_offsets: [u32; {}],",
+                self.ascii_titles.len() + 1
+            )
+            .unwrap();
+
+            written += 4 * self.ascii_titles.len() + 4 * (self.ascii_titles.len() + 1);
+        }
+
+        #[cfg(feature = "gamehacking")]
+        {
+            for (id, _) in &self.gamehacking_map {
+                writer.write_all(&id.to_le_bytes()).unwrap();
+            }
+            write!(
+                meta_writer,
+                "gamehacking_map_ids: [u32; {}],",
+                self.gamehacking_map.len()
+            )
+            .unwrap();
+
+            for (_, ghid) in &self.gamehacking_map {
+                writer.write_all(&ghid.to_le_bytes()).unwrap();
+            }
+            write!(
+                meta_writer,
+                "gamehacking_map_ghids: [u32; {}],",
+                self.gamehacking_map.len()
+            )
+            .unwrap();
+
+            written += 8 * self.gamehacking_map.len();
+        }
+
+        writer.write_all(all_titles.as_bytes()).unwrap();
+        written += all_titles.len();
+        write!(meta_writer, "all_titles: [u8; {}]}}", all_titles.len()).unwrap();
+
+        written
+    }
+}
+
 fn parse_titles_txt(content: &str) -> Vec<(u32, &str)> {
     let mut entries = Vec::with_capacity(16_384);
 
@@ -104,6 +203,8 @@ fn main() {
     println!("cargo::rerun-if-changed=build.rs");
     println!("cargo::rerun-if-changed=assets/**");
 
+    let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
+
     let titles_txt = fs::read_to_string("assets/wiitdb.txt").unwrap();
     let mut titles = parse_titles_txt(&titles_txt);
 
@@ -118,67 +219,86 @@ fn main() {
     titles.dedup_by_key(|(id, _)| *id);
 
     #[cfg(feature = "ascii-titles")]
-    ascii_titles.sort_unstable_by_key(|(id, _)| *id);
-    #[cfg(feature = "ascii-titles")]
-    ascii_titles.dedup_by_key(|(id, _)| *id);
+    {
+        ascii_titles.sort_unstable_by_key(|(id, _)| *id);
+        ascii_titles.dedup_by_key(|(id, _)| *id);
+    }
 
     #[cfg(feature = "gamehacking")]
     let gamehacking_map = parse_gamehacking_ids();
 
-    let out_path = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("id_map.rs");
-    let out_file = File::create(&out_path).unwrap();
-    let mut out = BufWriter::new(out_file);
+    let data = Data {
+        titles,
+        #[cfg(feature = "ascii-titles")]
+        ascii_titles,
+        #[cfg(feature = "gamehacking")]
+        gamehacking_map,
+    };
 
-    // title map
-    {
-        write!(
-            &mut out,
-            "#[cfg(not(clippy))]\npub const TITLE_MAP: &[(u32,&str);{}] = &[",
-            titles.len()
-        )
-        .unwrap();
+    let out_path = out_dir.join("id_map.bin");
+    let out_file = File::create(out_path).unwrap();
+    let mut out_writer = BufWriter::new(out_file);
 
-        for (game_id, game_title) in &titles {
-            write!(&mut out, "({game_id},r#\"{game_title}\"#),").unwrap();
-        }
+    let meta_out_path = out_dir.join("id_map_meta.rs");
+    let meta_out_file = File::create(meta_out_path).unwrap();
+    let mut meta_out_writer = BufWriter::new(meta_out_file);
 
-        out.write_all(b"];\n#[cfg(clippy)]\npub const TITLE_MAP: &[(u32,&str);0] = &[];\n")
-            .unwrap();
-    }
+    #[cfg(feature = "compress-deflate")]
+    let data_size = {
+        let mut uncompressed = Vec::new();
+        let written = data.write(&mut uncompressed, &mut meta_out_writer);
+        let padded = written.next_multiple_of(4);
+        uncompressed.resize(padded, 0);
 
-    // gamehacking map
-    #[cfg(feature = "gamehacking")]
-    {
-        write!(
-            &mut out,
-            "#[cfg(not(clippy))]\npub const GAMEHACKING_MAP: &[(u32,u32);{}] = &[",
-            gamehacking_map.len()
-        )
-        .unwrap();
+        let compressed = miniz_oxide::deflate::compress_to_vec(&uncompressed, 9);
+        out_writer.write_all(&compressed).unwrap();
 
-        for (game_id, ghid) in gamehacking_map {
-            write!(&mut out, "({game_id},{ghid}),").unwrap();
-        }
+        padded
+    };
 
-        out.write_all(b"];\n#[cfg(clippy)]\npub const GAMEHACKING_MAP: &[(u32,u32);0] = &[];\n")
-            .unwrap();
-    }
+    #[cfg(feature = "compress-zstd")]
+    let data_size = unsafe {
+        let mut uncompressed = Vec::new();
+        let written = data.write(&mut uncompressed, &mut meta_out_writer);
+        let padded = written.next_multiple_of(4);
+        uncompressed.resize(padded, 0);
 
-    // ascii title map
-    #[cfg(feature = "ascii-titles")]
-    {
-        write!(
-            &mut out,
-            "#[cfg(not(clippy))]\npub const ASCII_TITLE_MAP: &[(u32,&str);{}] = &[",
-            ascii_titles.len()
-        )
-        .unwrap();
+        let capacity = zstd_sys::ZSTD_compressBound(uncompressed.len());
+        let mut dst: Vec<u8> = Vec::with_capacity(capacity);
 
-        for (game_id, game_title) in ascii_titles {
-            write!(&mut out, "({game_id},r#\"{game_title}\"#),").unwrap();
-        }
+        let written = zstd_sys::ZSTD_compress(
+            dst.as_mut_ptr().cast(),
+            capacity,
+            uncompressed.as_ptr().cast(),
+            uncompressed.len(),
+            19,
+        );
 
-        out.write_all(b"];\n#[cfg(clippy)]\npub const ASCII_TITLE_MAP: &[(u32,&str);0] = &[];\n")
-            .unwrap();
-    }
+        assert_eq!(zstd_sys::ZSTD_isError(written), 0);
+
+        dst.set_len(written);
+        out_writer.write_all(&dst).unwrap();
+
+        padded
+    };
+
+    #[cfg(not(feature = "_compress"))]
+    let data_size = {
+        let written = data.write(&mut out_writer, &mut meta_out_writer);
+        let padded = written.next_multiple_of(4);
+        let padding = padded - written;
+
+        out_writer.write_all(&[0u8; 4][..padding]).unwrap();
+
+        padded
+    };
+
+    write!(
+        &mut meta_out_writer,
+        "const DATA_SIZE: usize = {data_size};"
+    )
+    .unwrap();
+
+    out_writer.flush().unwrap();
+    meta_out_writer.flush().unwrap();
 }
