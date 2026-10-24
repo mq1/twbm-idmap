@@ -19,22 +19,29 @@ struct Data<'a> {
 
 impl<'a> Data<'a> {
     fn write(&self, writer: &mut dyn Write, meta_writer: &mut dyn Write) -> usize {
+        let endianness = std::env::var("CARGO_CFG_TARGET_ENDIAN").unwrap();
+        let encode_u32 = move |value: u32| match endianness.as_str() {
+            "little" => value.to_le_bytes(),
+            "big" => value.to_be_bytes(),
+            _ => unreachable!(),
+        };
+
         meta_writer.write_all(b"#[repr(C)]\nstruct Data {").unwrap();
 
         let mut all_titles = String::new();
 
         for (id, _) in &self.titles {
-            writer.write_all(&id.to_le_bytes()).unwrap();
+            writer.write_all(&encode_u32(*id)).unwrap();
         }
         write!(meta_writer, "title_map_ids: [u32; {}],", self.titles.len()).unwrap();
 
         for (_, title) in &self.titles {
             let pos = u32::try_from(all_titles.len()).unwrap();
-            writer.write_all(&pos.to_le_bytes()).unwrap();
+            writer.write_all(&encode_u32(pos)).unwrap();
             all_titles.push_str(title);
         }
         let pos = u32::try_from(all_titles.len()).unwrap();
-        writer.write_all(&pos.to_le_bytes()).unwrap();
+        writer.write_all(&encode_u32(pos)).unwrap();
         write!(
             meta_writer,
             "title_map_offsets: [u32; {}],",
@@ -47,7 +54,7 @@ impl<'a> Data<'a> {
         #[cfg(feature = "ascii-titles")]
         {
             for (id, _) in &self.ascii_titles {
-                writer.write_all(&id.to_le_bytes()).unwrap();
+                writer.write_all(&encode_u32(*id)).unwrap();
             }
             write!(
                 meta_writer,
@@ -58,11 +65,11 @@ impl<'a> Data<'a> {
 
             for (_, title) in &self.ascii_titles {
                 let pos = u32::try_from(all_titles.len()).unwrap();
-                writer.write_all(&pos.to_le_bytes()).unwrap();
+                writer.write_all(&encode_u32(pos)).unwrap();
                 all_titles.push_str(title);
             }
             let pos = u32::try_from(all_titles.len()).unwrap();
-            writer.write_all(&pos.to_le_bytes()).unwrap();
+            writer.write_all(&encode_u32(pos)).unwrap();
             write!(
                 meta_writer,
                 "ascii_title_map_offsets: [u32; {}],",
@@ -76,7 +83,7 @@ impl<'a> Data<'a> {
         #[cfg(feature = "gamehacking")]
         {
             for (id, _) in &self.gamehacking_map {
-                writer.write_all(&id.to_le_bytes()).unwrap();
+                writer.write_all(&encode_u32(*id)).unwrap();
             }
             write!(
                 meta_writer,
@@ -86,7 +93,7 @@ impl<'a> Data<'a> {
             .unwrap();
 
             for (_, ghid) in &self.gamehacking_map {
-                writer.write_all(&ghid.to_le_bytes()).unwrap();
+                writer.write_all(&encode_u32(*ghid)).unwrap();
             }
             write!(
                 meta_writer,
