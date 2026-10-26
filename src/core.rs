@@ -3,38 +3,27 @@
 
 include!(concat!(env!("OUT_DIR"), "/id_map_meta.rs"));
 
-#[cfg(not(feature = "_compress"))]
+#[cfg(not(feature = "compress"))]
 static DATA: Data =
     unsafe { std::mem::transmute(*include_bytes!(concat!(env!("OUT_DIR"), "/id_map.bin"))) };
 
-#[cfg(feature = "_compress")]
+#[cfg(feature = "compress")]
 static DATA: std::sync::LazyLock<Box<Data>> = std::sync::LazyLock::new(|| {
     const COMPRESSED: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/id_map.bin"));
 
-    let mut buf = Box::<Data>::new_zeroed();
+    let mut buf = Box::<Data>::new_uninit();
 
-    {
-        let data = buf.as_mut_ptr().cast();
-        let len = std::mem::size_of::<Data>();
-
-        #[cfg(feature = "compress-deflate")]
-        miniz_oxide::inflate::decompress_slice_iter_to_slice(
-            unsafe { std::slice::from_raw_parts_mut(data, len) },
-            std::iter::once(COMPRESSED),
-            false,
-            true,
-        )
-        .unwrap();
-
-        #[cfg(feature = "compress-zstd")]
+    miniz_oxide::inflate::decompress_slice_iter_to_slice(
         unsafe {
-            let written =
-                zstd_sys::ZSTD_decompress(data, len, COMPRESSED.as_ptr().cast(), COMPRESSED.len());
-
-            debug_assert_eq!(zstd_sys::ZSTD_isError(written), 0);
-            debug_assert_eq!(written, len);
-        }
-    }
+            let data = buf.as_mut_ptr().cast();
+            let len = std::mem::size_of::<Data>();
+            std::slice::from_raw_parts_mut(data, len)
+        },
+        std::iter::once(COMPRESSED),
+        false,
+        true,
+    )
+    .expect("Corrupted compressed data from build.rs");
 
     unsafe { buf.assume_init() }
 });

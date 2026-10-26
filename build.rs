@@ -246,7 +246,7 @@ fn main() {
     let meta_out_file = File::create(meta_out_path).unwrap();
     let mut meta_out_writer = BufWriter::new(meta_out_file);
 
-    #[cfg(feature = "compress-deflate")]
+    #[cfg(feature = "compress")]
     {
         let mut uncompressed = Vec::new();
         data.write(&mut uncompressed, &mut meta_out_writer);
@@ -255,29 +255,7 @@ fn main() {
         out_writer.write_all(&compressed).unwrap();
     }
 
-    #[cfg(feature = "compress-zstd")]
-    unsafe {
-        let mut uncompressed = Vec::new();
-        data.write(&mut uncompressed, &mut meta_out_writer);
-
-        let capacity = zstd_sys::ZSTD_compressBound(uncompressed.len());
-        let mut dst: Vec<u8> = Vec::with_capacity(capacity);
-
-        let written = zstd_sys::ZSTD_compress(
-            dst.as_mut_ptr().cast(),
-            capacity,
-            uncompressed.as_ptr().cast(),
-            uncompressed.len(),
-            19,
-        );
-
-        assert_eq!(zstd_sys::ZSTD_isError(written), 0);
-
-        dst.set_len(written);
-        out_writer.write_all(&dst).unwrap();
-    }
-
-    #[cfg(not(feature = "_compress"))]
+    #[cfg(not(feature = "compress"))]
     data.write(&mut out_writer, &mut meta_out_writer);
 
     out_writer.flush().unwrap();
