@@ -28,8 +28,8 @@ jobs:
       - name: test (ascii-titles)
         run: cargo run --features ascii-titles -- STGJAF
 
-      - name: test (compress-deflate)
-        run: cargo run --features gamehacking,ascii-titles,compress-deflate -- STGJAF
+      - name: test (compress)
+        run: cargo run --features compress -- STGJAF
 
-      - name: test (compress-zstd)
-        run: cargo run --features gamehacking,ascii-titles,compress-zstd -- STGJAF
+      - name: test (all features)
+        run: cargo run --all-features -- STGJAF
